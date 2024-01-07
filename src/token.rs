@@ -14,7 +14,7 @@ pub struct Claims {
     pub exp: usize,
 }
 
-pub fn create_token(id: &u64) -> Result<std::string::String, String> {
+pub fn create_token(id: &String) -> Result<std::string::String, String> {
     let expiration_time = env::var("API_TOKENS_EXPIRATION_TIME").unwrap_or(String::from("86400"));
     let header = Header::new(Algorithm::HS512);
     let claims = Claims {

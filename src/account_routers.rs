@@ -1,16 +1,15 @@
 use crate::helpers::{payload_analyzer, random_string};
 use crate::account::{Preferences, Account, Email, AccountType};
 use crate::requests_interfaces::SignUp;
-use crate::suscription::{Suscription, SuscriptionFrequencyClass};
+use crate::subscription::{Subscription, SubscriptionFrequencyClass};
 use crate::{account::GenericResponse, server::AppState};
 
 use axum::{extract::rejection::JsonRejection, http::StatusCode, Json};
+use chrono::Utc;
 use mongodb::{bson::doc, Collection};
 use regex::Regex;
 use serde_json::json;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::ops::Add;
 
 use bcrypt::{hash, DEFAULT_COST};
 
@@ -28,7 +27,7 @@ pub async fn create_account(
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
                 message: String::from(
-                    "invalid username, must be at least 2 characters and at most 15",
+                    "invalid name, must be at least 2 characters and at most 15",
                 ),
                 data: json!({}),
                 exited_code: 1,
@@ -100,7 +99,7 @@ pub async fn create_account(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("username and password must be different"),
+                message: String::from("email and password must be different"),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -174,29 +173,26 @@ pub async fn create_account(
         );
     }
 
-    let ends_at = SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .unwrap()
-    .add(std::time::Duration::from_secs(3155695200));
-
-    let suscription_id = random_string(10);
-    let suscription = Suscription {
-        id: suscription_id.await,
-        suscription_plan_id: "free_default_v0.0.1alpha".to_string(),
-        frequency: SuscriptionFrequencyClass::UNDEFINED,
-        created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
-        updated_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
-        starts_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
-        // in 100 years
-        ends_at,
-        renews_at: ends_at,
-        is_active: true,
+    let current_datetime = Utc::now();
+    let iso8601_string = current_datetime.to_rfc3339();
+    let suscription_id = random_string(10).await;
+    let suscription = Subscription {
+        id: suscription_id,
+        product_id: 0,
+        variant_id: 0,
+        frequency: SubscriptionFrequencyClass::UNDEFINED,
+        created_at: iso8601_string.clone(),
+        updated_at: iso8601_string.clone(),
+        starts_at: "".to_string(),
+        ends_at: "".to_string(),
+        renews_at: "".to_string(),
+        active: true,
         history_logs: vec![],
     };
 
-    let created_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let user = Account {
-        id: state.last_account_id + 1,
+    let id = random_string(30).await;
+    let account = Account {
+        id,
         name: payload.name.clone(),
         class,
         emails,
@@ -211,18 +207,18 @@ pub async fn create_account(
         },
         suscription,
 
-        created_at,
-        updated_at: created_at,
+        created_at: iso8601_string.clone(),
+        updated_at: iso8601_string.clone(),
         deleted: false,
     };
 
-    match collection.insert_one(user.clone(), None).await {
+    match collection.insert_one(account.clone(), None).await {
         Ok(_) => (),
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: String::from("error inserting user into database"),
+                    message: String::from("error inserting record into database"),
                     data: json!({}),
                     exited_code: 1,
                 }),
@@ -233,8 +229,8 @@ pub async fn create_account(
     (
         StatusCode::CREATED,
         Json(GenericResponse {
-            message: String::from("user registered successfully"),
-            data: json!(user),
+            message: String::from("account registered successfully"),
+            data: json!(account),
             exited_code: 0,
         }),
     )

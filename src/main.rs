@@ -7,7 +7,9 @@ mod mongo;
 mod redis;
 mod account_routers;
 mod helpers;
-mod suscription;
+mod subscription;
+mod webhook_listener;
+mod lemonsqueezy;
 
 use std::env;
 
@@ -26,6 +28,7 @@ async fn main() {
     env::var("REDIS_URI").expect("REDIS_URI must be set");
 
     env::var("API_TOKENS_SIGNING_KEY").expect("API_SIGNING_KEY must be set");
+    env::var("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY").expect("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY must be set");
 
     let expiration_time = match env::var("API_TOKENS_EXPIRATION_TIME") {
         Ok(expiration_time) => expiration_time,

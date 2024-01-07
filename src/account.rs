@@ -1,7 +1,7 @@
-use std::{str::FromStr, time::Duration};
+use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::suscription::Suscription;
+use crate::subscription::Subscription;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenericResponse {
@@ -41,7 +41,7 @@ impl FromStr for AccountType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     // identificators
-    pub id: u64,
+    pub id: String,
     pub name: String,
     pub class: AccountType,
     pub emails: Vec<Email>,
@@ -52,10 +52,10 @@ pub struct Account {
 
     // miscelaneous
     pub preferences: Preferences,
-    pub suscription: Suscription,
+    pub suscription: Subscription,
 
-    pub created_at: Duration,
-    pub updated_at: Duration,
+    pub created_at: String,
+    pub updated_at: String,
     pub deleted: bool,
 }
 

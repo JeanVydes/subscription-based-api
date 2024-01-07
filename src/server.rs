@@ -1,16 +1,24 @@
-use crate::{identity_routers::{request_credentials, get_session, identity_middleware}, account::Account, account_routers::create_account, helpers::fallback};
-use axum::{routing::{get, post}, Router, http::Method, middleware};
-use mongodb::{Client as MongoClient, Collection, Database};
+use crate::{identity_routers::{request_credentials, get_session, identity_middleware}, account_routers::create_account, helpers::fallback, webhook_listener::{orders_webhook_events_listener, subscription_webhook_events_listener}, lemonsqueezy::{OrderEvent, SubscriptionEvent}};
+use axum::{routing::{get, post}, Router, http::{Method, HeaderMap}, middleware, Json, extract::rejection::JsonRejection};
+use mongodb::{Client as MongoClient, Database};
 use redis::Client as RedisClient;
 use std::{env, sync::Arc};
 use tower_http::{cors::{Any, CorsLayer}, compression::CompressionLayer};
+
+#[derive(Clone)]
+pub struct Products {
+    pub pro_product_id: u64,
+    pub pro_monthly_variant_id: u64,
+    pub pro_annually_variant_id: u64,
+}
 
 #[derive(Clone)]
 pub struct AppState {
     pub mongodb_client: MongoClient,
     pub redis_connection: RedisClient,
     pub mongo_db: Database,
-    pub last_account_id: u64,
+    pub lemonsqueezy_webhook_signature_key: String,
+    pub products: Products,
 }
 
 pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
@@ -20,17 +28,38 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
     };
 
     let mongo_db = mongodb_client.database(&mongo_db);
-    let accounts_collection: Collection<Account> = mongo_db.collection("accounts");
-    let count = match accounts_collection.count_documents(None, None).await {
-        Ok(count) => count,
-        Err(e) => panic!("Error counting documents: {}", e),
+    let lemonsqueezy_webhook_signature_key = match env::var("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY") {
+        Ok(uri) => uri,
+        Err(_) => String::from("lemonsqueezy_webhook_signature_key not found"),
+    };
+
+    let pro_product_id = match env::var("PRO_PRODUCT_ID") {
+        Ok(id) => id.parse::<u64>().unwrap(),
+        Err(_) => panic!("pro_product_id not found"),
+    };
+
+    let pro_monthly_variant_id = match env::var("PRO_MONTHLY_VARIANT_ID") {
+        Ok(id) => id.parse::<u64>().unwrap(),
+        Err(_) => panic!("pro_monthly_variant_id not found"),
+    };
+
+    let pro_annually_variant_id = match env::var("PRO_ANNUALLY_VARIANT_ID") {
+        Ok(id) => id.parse::<u64>().unwrap(),
+        Err(_) => panic!("pro_annually_variant_id not found"),
+    };
+
+    let products = Products {
+        pro_product_id,
+        pro_monthly_variant_id,
+        pro_annually_variant_id,
     };
 
     let app_state = Arc::new(AppState {
         mongodb_client: mongodb_client.clone(),
         redis_connection: redis_client.clone(),
         mongo_db,
-        last_account_id: count,
+        lemonsqueezy_webhook_signature_key,
+        products,
     });
     
     let accounts = Router::new()
@@ -59,9 +88,30 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
             }),
         );
 
+    let webhooks = Router::new()
+        .route(
+            "/lemonsqueezy/events/orders",
+            get({
+                let app_state = Arc::clone(&app_state);
+                move |(headers, payload): (HeaderMap, Result<Json<OrderEvent>, JsonRejection>)| {
+                    orders_webhook_events_listener(headers, payload, app_state)
+                }
+            }),
+        )
+        .route(
+            "/lemonsqueezy/events/subscriptions",
+            get({
+                let app_state = Arc::clone(&app_state);
+                move |(headers, payload): (HeaderMap, Result<Json<SubscriptionEvent>, JsonRejection>)| {
+                    subscription_webhook_events_listener(headers, payload, app_state)
+                }
+            }),
+        );
+
     let api = Router::new()
         .nest("/accounts", accounts)
-        .nest("/identity", identity);
+        .nest("/identity", identity)
+        .nest("/webhooks", webhooks);
         
     let cors = CorsLayer::new()
         .allow_credentials(false)
