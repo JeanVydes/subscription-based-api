@@ -52,7 +52,7 @@ pub struct Account {
 
     // miscelaneous
     pub preferences: Preferences,
-    pub suscription: Subscription,
+    pub subscription: Subscription,
 
     pub created_at: String,
     pub updated_at: String,

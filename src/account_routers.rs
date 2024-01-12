@@ -1,7 +1,7 @@
 use crate::helpers::{payload_analyzer, random_string};
 use crate::account::{Preferences, Account, Email, AccountType};
 use crate::requests_interfaces::SignUp;
-use crate::subscription::{Subscription, SubscriptionFrequencyClass};
+use crate::subscription::{Subscription, SubscriptionFrequencyClass, Slug};
 use crate::{account::GenericResponse, server::AppState};
 
 use axum::{extract::rejection::JsonRejection, http::StatusCode, Json};
@@ -12,6 +12,8 @@ use serde_json::json;
 use std::sync::Arc;
 
 use bcrypt::{hash, DEFAULT_COST};
+
+
 
 pub async fn create_account(
     payload_result: Result<Json<SignUp>, JsonRejection>,
@@ -175,18 +177,19 @@ pub async fn create_account(
 
     let current_datetime = Utc::now();
     let iso8601_string = current_datetime.to_rfc3339();
-    let suscription_id = random_string(10).await;
-    let suscription = Subscription {
-        id: suscription_id,
+    let subscription_id = random_string(10).await;
+    let subscription = Subscription {
+        id: subscription_id,
         product_id: 0,
         variant_id: 0,
+        slug: Slug::FREE.to_string(),
         frequency: SubscriptionFrequencyClass::UNDEFINED,
         created_at: iso8601_string.clone(),
         updated_at: iso8601_string.clone(),
         starts_at: "".to_string(),
         ends_at: "".to_string(),
         renews_at: "".to_string(),
-        active: true,
+        status: "".to_string(),
         history_logs: vec![],
     };
 
@@ -205,7 +208,7 @@ pub async fn create_account(
             language: String::from("en"),
             notifications: true,
         },
-        suscription,
+        subscription,
 
         created_at: iso8601_string.clone(),
         updated_at: iso8601_string.clone(),

@@ -1,4 +1,4 @@
-use crate::{account::GenericResponse, server::AppState, helpers::payload_analyzer, lemonsqueezy::{OrderEvent, SubscriptionEvent, subscription_created}};
+use crate::{account::GenericResponse, server::AppState, helpers::payload_analyzer, lemonsqueezy::{OrderEvent, SubscriptionEvent, subscription_created, subscription_update_status, subscription_updated, subscription_update_history_logs}};
 
 use axum::{extract::rejection::JsonRejection, http::StatusCode, Json, http::HeaderMap};
 
@@ -122,6 +122,8 @@ pub async fn orders_webhook_events_listener(
         );
     }
 
+    // order managing, i dont need this currently
+
     return (
         StatusCode::OK,
         Json(GenericResponse {
@@ -175,12 +177,74 @@ pub async fn subscription_webhook_events_listener(
         "subscription_updated" => {
             let state = state.clone();
             let payload = payload.clone();
-            //state.lemonsqueezy_subscription_updated(state, payload) => {},
+            match subscription_updated(payload.0, state).await {
+                Ok(_) => (),
+                Err(json) => return (StatusCode::BAD_REQUEST, json),
+            }
         },
-        "subscription_deleted" => {
-            let mut state = state.clone();
+        "subscription_cancelled" => {
+            let state = state.clone();
             let payload = payload.clone();
-            //state.lemonsqueezy_subscription_deleted(state, payload) => {},
+            match subscription_update_status(payload.0, state).await {
+                Ok(_) => (),
+                Err(json) => return (StatusCode::BAD_REQUEST, json),
+            }
+        },
+        "subscription_resumed" => {
+            let state = state.clone();
+            let payload = payload.clone();
+            match subscription_update_status(payload.0, state).await {
+                Ok(_) => (),
+                Err(json) => return (StatusCode::BAD_REQUEST, json),
+            }
+        },
+        "subscription_expired" => {
+            let state = state.clone();
+            let payload = payload.clone();
+            match subscription_update_status(payload.0, state).await {
+                Ok(_) => (),
+                Err(json) => return (StatusCode::BAD_REQUEST, json),
+            }
+        },
+        "subscription_paused" => {
+            let state = state.clone();
+            let payload = payload.clone();
+            match subscription_update_status(payload.0, state).await {
+                Ok(_) => (),
+                Err(json) => return (StatusCode::BAD_REQUEST, json),
+            }
+        },
+        "subscription_unpaused" => {
+            let state = state.clone();
+            let payload = payload.clone();
+            match subscription_update_status(payload.0, state).await {
+                Ok(_) => (),
+                Err(json) => return (StatusCode::BAD_REQUEST, json),
+            }
+        },
+        "subscription_payment_success" => {
+            let state = state.clone();
+            let payload = payload.clone();
+            match subscription_update_history_logs(payload.0, state).await {
+                Ok(_) => (),
+                Err(json) => return (StatusCode::BAD_REQUEST, json),
+            }
+        },
+        "subscription_payment_failed" => {
+            let state = state.clone();
+            let payload = payload.clone();
+            match subscription_update_history_logs(payload.0, state).await {
+                Ok(_) => (),
+                Err(json) => return (StatusCode::BAD_REQUEST, json),
+            }
+        },
+        "subscription_payment_recovered" => {
+            let state = state.clone();
+            let payload = payload.clone();
+            match subscription_update_history_logs(payload.0, state).await {
+                Ok(_) => (),
+                Err(json) => return (StatusCode::BAD_REQUEST, json),
+            }
         },
         _ => {},
     }

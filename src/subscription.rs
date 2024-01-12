@@ -5,7 +5,15 @@ use std::str::FromStr;
 pub enum Slug {
     FREE,
     PRO,
-    PROPLUS,
+}
+
+impl Slug {
+    pub fn to_string(&self) -> String {
+        match self {
+            Slug::FREE => String::from("free"),
+            Slug::PRO => String::from("pro"),
+        }
+    }
 }
 
 impl FromStr for Slug {
@@ -19,6 +27,8 @@ impl FromStr for Slug {
         }
     }
 }
+
+
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum SubscriptionFrequencyClass {
@@ -56,30 +66,10 @@ impl FromStr for SubscriptionFeatures {
     }
 }
 
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SubscriptionPlan {
-    pub id: String,
-    pub product_id: String,
-    pub variants: Vec<String>,
-    pub slug: Slug,
-    pub name: String,
-    pub price: u16,
-    pub frequency: Vec<SubscriptionFrequencyClass>,
-    pub most_popular: bool,
-    pub is_active: bool,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscriptionHistoryLog {
-    pub id: String,
-    pub subscription_plan_id: u64,
-    pub frequency: SubscriptionFrequencyClass,
-    pub starts_at: String,
-    pub ends_at: String,
-    pub renews_at: String,
+    pub event: String,
+    pub date: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,10 +77,11 @@ pub struct Subscription {
     pub id: String,
     pub product_id: u64,
     pub variant_id: u64,
+    pub slug: String,
     pub frequency: SubscriptionFrequencyClass,
-    pub active: bool,
+    pub status: String,
 
-    pub created_at: String, // well, this is when the account created the account, the subscription is never deleted, only updated, if end so is free 
+    pub created_at: String, // well, this is when the account created the account, the subscription is never deleted, only updated, if end so is free
     pub updated_at: String,
 
     pub starts_at: String,
