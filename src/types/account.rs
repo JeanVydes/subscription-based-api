@@ -1,7 +1,7 @@
-use std::str::FromStr;
+use crate::types::subscription::Subscription;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::subscription::Subscription;
+use std::str::FromStr;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenericResponse {
@@ -37,7 +37,6 @@ impl FromStr for AccountType {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     // identificators
@@ -47,7 +46,7 @@ pub struct Account {
     pub emails: Vec<Email>,
 
     // security
-    pub password: String,                   // store hash of password (NEVER PLAIN TEXT)
+    pub password: String, // store hash of password (NEVER PLAIN TEXT)
     pub backup_security_codes: Vec<String>, // store hashes of backup securities
 
     // miscelaneous

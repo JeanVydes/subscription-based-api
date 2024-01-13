@@ -1,8 +1,8 @@
 use crate::helpers::payload_analyzer;
-use crate::account::{GenericResponse, Account};
-use crate::requests_interfaces::SignIn;
 use crate::server::AppState;
 use crate::token::{create_token, validate_token};
+use crate::types::account::{Account, GenericResponse};
+use crate::types::incoming_requests::SignIn;
 
 use axum::http::{HeaderMap, Request};
 use axum::middleware::Next;
@@ -11,8 +11,8 @@ use axum::{extract::rejection::JsonRejection, extract::State, http::StatusCode, 
 use std::sync::Arc;
 
 use bcrypt::verify;
+use redis::{Client, Commands, RedisError};
 use serde_json::json;
-use redis::{Commands, RedisError, Client};
 
 use mongodb::bson::doc;
 
@@ -31,8 +31,8 @@ pub async fn identity_middleware<B>(
                     message: String::from("unauthorized"),
                     data: json!({}),
                     exited_code: 0,
-                })),
-            )
+                }),
+            ))
         }
     };
 
@@ -45,8 +45,8 @@ pub async fn identity_middleware<B>(
                     message: String::from("error parsing token"),
                     data: json!({}),
                     exited_code: 0,
-                })),
-            )
+                }),
+            ))
         }
     };
 
@@ -59,22 +59,26 @@ pub async fn identity_middleware<B>(
                     message: String::from("unauthorized"),
                     data: json!({}),
                     exited_code: 0,
-                })),
-            )
+                }),
+            ))
         }
     };
 
-    let result = redis_connection.clone().get::<String, u64>(token_string.to_string());
+    let result = redis_connection
+        .clone()
+        .get::<String, u64>(token_string.to_string());
     let id: u64 = match result {
         Ok(id) => id,
-        Err(err) => return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(GenericResponse {
-                message: format!("error getting session: {}", err),
-                data: json!({}),
-                exited_code: 0,
-            })),
-        ),
+        Err(err) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: format!("error getting session: {}", err),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            ))
+        }
     };
 
     println!("id: {}", id);
@@ -129,18 +133,22 @@ pub async fn get_session(
         }
     };
 
-    
-    let result = state.redis_connection.clone().get::<String, u64>(token_string.to_string());
+    let result = state
+        .redis_connection
+        .clone()
+        .get::<String, u64>(token_string.to_string());
     let id: u64 = match result {
         Ok(id) => id,
-        Err(err) => return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(GenericResponse {
-                message: format!("error getting session: {}", err),
-                data: json!({}),
-                exited_code: 0,
-            }),
-        ),
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: format!("error getting session: {}", err),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
     };
 
     if id == 0 {
@@ -250,23 +258,25 @@ pub async fn request_credentials(
             )
         }
     };
-    
-    let result: Result<bool, RedisError> = state.redis_connection.clone().set_ex(
-        token.clone(),
-        &account.id,
-        86400,
-    );
+
+    let result: Result<bool, RedisError> =
+        state
+            .redis_connection
+            .clone()
+            .set_ex(token.clone(), &account.id, 86400);
 
     match result {
         Ok(_) => (),
-        Err(err) => return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(GenericResponse {
-                message: format!("error caching session: {}", err),
-                data: json!({}),
-                exited_code: 0,
-            }),
-        ),
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: format!("error caching session: {}", err),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
     };
 
     return (

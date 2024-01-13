@@ -1,16 +1,24 @@
-use crate::{identity_routers::{request_credentials, get_session, identity_middleware}, account_routers::create_account, helpers::fallback, webhook_listener::{orders_webhook_events_listener, subscription_webhook_events_listener}, lemonsqueezy::{OrderEvent, SubscriptionEvent}, requests_interfaces::WebhookEventIncoming};
-use axum::{routing::{get, post}, Router, http::{Method, HeaderMap}, middleware, Json, extract::rejection::JsonRejection};
+use crate::{
+    controllers::account::create_account,
+    controllers::identity::{get_session, identity_middleware, request_credentials},
+    helpers::fallback,
+    lemonsqueezy::webhook::{orders_webhook_events_listener, subscription_webhook_events_listener},
+    types::lemonsqueezy::{OrderEvent, SubscriptionEvent, Products},
+};
+use axum::{
+    extract::rejection::JsonRejection,
+    http::{HeaderMap, Method},
+    middleware,
+    routing::{get, post},
+    Json, Router,
+};
 use mongodb::{Client as MongoClient, Database};
 use redis::Client as RedisClient;
 use std::{env, sync::Arc};
-use tower_http::{cors::{Any, CorsLayer}, compression::CompressionLayer};
-
-#[derive(Clone)]
-pub struct Products {
-    pub pro_product_id: i64,
-    pub pro_monthly_variant_id: i64,
-    pub pro_annually_variant_id: i64,
-}
+use tower_http::{
+    compression::CompressionLayer,
+    cors::{Any, CorsLayer},
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -61,7 +69,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
         lemonsqueezy_webhook_signature_key,
         products,
     });
-    
+
     let accounts = Router::new()
         .route(
             "/account",
@@ -70,7 +78,10 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
                 move |payload| create_account(payload, app_state)
             }),
         )
-        .route_layer(middleware::from_fn_with_state(app_state.redis_connection.clone(), identity_middleware));
+        .route_layer(middleware::from_fn_with_state(
+            app_state.redis_connection.clone(),
+            identity_middleware,
+        ));
 
     let identity = Router::new()
         .route(
@@ -102,7 +113,10 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
             "/lemonsqueezy/events/subscriptions",
             post({
                 let app_state = Arc::clone(&app_state);
-                move |(headers, payload): (HeaderMap, Result<Json<WebhookEventIncoming>, JsonRejection>)| {
+                move |(headers, payload): (
+                    HeaderMap,
+                    Result<Json<SubscriptionEvent>, JsonRejection>,
+                )| {
                     subscription_webhook_events_listener(headers, payload, app_state)
                 }
             }),
@@ -112,7 +126,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
         .nest("/accounts", accounts)
         .nest("/identity", identity)
         .nest("/webhooks", webhooks);
-        
+
     let cors = CorsLayer::new()
         .allow_credentials(false)
         .allow_methods([Method::GET, Method::POST, Method::DELETE])

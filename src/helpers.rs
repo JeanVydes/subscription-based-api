@@ -1,8 +1,12 @@
-use crate::account::GenericResponse;
-use axum::{extract::rejection::JsonRejection, http::{StatusCode, Uri}, Json};
-use serde_json::json;
+use crate::types::account::GenericResponse;
+use axum::{
+    extract::rejection::JsonRejection,
+    http::{StatusCode, Uri},
+    Json,
+};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use serde_json::json;
 
 pub fn payload_analyzer<T>(
     payload_result: Result<Json<T>, JsonRejection>,
@@ -10,9 +14,6 @@ pub fn payload_analyzer<T>(
     let payload = match payload_result {
         Ok(payload) => payload,
         Err(err) => {
-            println!("error while analyzing payload");
-            panic!("error payload: {}", err);
-            
             let message = format!("invalid payload: {}", err);
             let json = Json(GenericResponse {
                 message,
@@ -29,11 +30,14 @@ pub fn payload_analyzer<T>(
 
 pub async fn fallback(uri: Uri) -> (StatusCode, Json<GenericResponse>) {
     let message = format!("invalid endpoint: {}", uri.path());
-    (StatusCode::NOT_FOUND, Json(GenericResponse {
-        message,
-        data: json!({}),
-        exited_code: 1,
-    }))
+    (
+        StatusCode::NOT_FOUND,
+        Json(GenericResponse {
+            message,
+            data: json!({}),
+            exited_code: 1,
+        }),
+    )
 }
 
 pub async fn random_string(length: usize) -> String {

@@ -1,8 +1,8 @@
 use crate::helpers::{payload_analyzer, random_string};
-use crate::account::{Preferences, Account, Email, AccountType};
-use crate::requests_interfaces::SignUp;
-use crate::subscription::{Subscription, SubscriptionFrequencyClass, Slug};
-use crate::{account::GenericResponse, server::AppState};
+use crate::types::account::{Account, AccountType, Email, Preferences};
+use crate::types::incoming_requests::SignUp;
+use crate::types::subscription::{Slug, Subscription, SubscriptionFrequencyClass};
+use crate::{server::AppState, types::account::GenericResponse};
 
 use axum::{extract::rejection::JsonRejection, http::StatusCode, Json};
 use chrono::Utc;
@@ -12,8 +12,6 @@ use serde_json::json;
 use std::sync::Arc;
 
 use bcrypt::{hash, DEFAULT_COST};
-
-
 
 pub async fn create_account(
     payload_result: Result<Json<SignUp>, JsonRejection>,
@@ -28,9 +26,7 @@ pub async fn create_account(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from(
-                    "invalid name, must be at least 2 characters and at most 15",
-                ),
+                message: String::from("invalid name, must be at least 2 characters and at most 15"),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -153,7 +149,7 @@ pub async fn create_account(
         }
     };
 
-    let emails = vec![Email{
+    let emails = vec![Email {
         address: payload.email.to_lowercase(),
         verified: false,
         main: true,

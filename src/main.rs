@@ -1,17 +1,14 @@
-mod account;
-mod requests_interfaces;
-mod server;
-mod identity_routers;
-mod token;
-mod mongo;
-mod redis;
-mod account_routers;
 mod helpers;
-mod subscription;
-mod webhook_listener;
+mod server;
+mod token;
+
+mod controllers;
 mod lemonsqueezy;
+mod storage;
+mod types;
 
 use std::env;
+use storage::{mongo, redis};
 
 #[tokio::main]
 async fn main() {
@@ -28,13 +25,14 @@ async fn main() {
     env::var("REDIS_URI").expect("REDIS_URI must be set");
 
     env::var("API_TOKENS_SIGNING_KEY").expect("API_SIGNING_KEY must be set");
-    env::var("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY").expect("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY must be set");
+    env::var("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY")
+        .expect("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY must be set");
 
     let expiration_time = match env::var("API_TOKENS_EXPIRATION_TIME") {
         Ok(expiration_time) => expiration_time,
         Err(_) => panic!("API_TOKENS_EXPIRATION_TIME not found"),
     };
-    
+
     match expiration_time.parse::<usize>() {
         Ok(_) => (),
         Err(_) => panic!("API_TOKENS_EXPIRATION_TIME must be a number"),
@@ -50,7 +48,11 @@ async fn main() {
         Err(e) => panic!("Error connecting to Redis: {}", e),
     };
 
-    match mongo_client.database("admin").run_command(mongodb::bson::doc! {"ping": 1}, None).await {
+    match mongo_client
+        .database("admin")
+        .run_command(mongodb::bson::doc! {"ping": 1}, None)
+        .await
+    {
         Ok(_) => println!("Connected to MongoDB"),
         Err(e) => panic!("Error connecting to MongoDB: {}", e),
     };

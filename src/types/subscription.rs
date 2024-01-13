@@ -28,8 +28,6 @@ impl FromStr for Slug {
     }
 }
 
-
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum SubscriptionFrequencyClass {
     MONTHLY,
