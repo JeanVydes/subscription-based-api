@@ -75,8 +75,8 @@ pub struct SubscriptionHistoryLog {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subscription {
     pub id: String,
-    pub product_id: u64,
-    pub variant_id: u64,
+    pub product_id: i64,
+    pub variant_id: i64,
     pub slug: String,
     pub frequency: SubscriptionFrequencyClass,
     pub status: String,

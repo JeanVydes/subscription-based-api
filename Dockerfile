@@ -14,4 +14,5 @@ RUN cargo build --release
 # But beware that some images have old glibc which makes rust unhappy
 FROM fedora:34 AS runner
 EXPOSE 8080
-COPY --from=builder /prod/target/release/eight-i /bin
+COPY --from=builder /prod/target/release/app /bin/app
+ENTRYPOINT ["/bin/app"]

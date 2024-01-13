@@ -1,4 +1,4 @@
-use crate::{identity_routers::{request_credentials, get_session, identity_middleware}, account_routers::create_account, helpers::fallback, webhook_listener::{orders_webhook_events_listener, subscription_webhook_events_listener}, lemonsqueezy::{OrderEvent, SubscriptionEvent}};
+use crate::{identity_routers::{request_credentials, get_session, identity_middleware}, account_routers::create_account, helpers::fallback, webhook_listener::{orders_webhook_events_listener, subscription_webhook_events_listener}, lemonsqueezy::{OrderEvent, SubscriptionEvent}, requests_interfaces::WebhookEventIncoming};
 use axum::{routing::{get, post}, Router, http::{Method, HeaderMap}, middleware, Json, extract::rejection::JsonRejection};
 use mongodb::{Client as MongoClient, Database};
 use redis::Client as RedisClient;
@@ -7,9 +7,9 @@ use tower_http::{cors::{Any, CorsLayer}, compression::CompressionLayer};
 
 #[derive(Clone)]
 pub struct Products {
-    pub pro_product_id: u64,
-    pub pro_monthly_variant_id: u64,
-    pub pro_annually_variant_id: u64,
+    pub pro_product_id: i64,
+    pub pro_monthly_variant_id: i64,
+    pub pro_annually_variant_id: i64,
 }
 
 #[derive(Clone)]
@@ -34,17 +34,17 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
     };
 
     let pro_product_id = match env::var("PRO_PRODUCT_ID") {
-        Ok(id) => id.parse::<u64>().unwrap(),
+        Ok(id) => id.parse::<i64>().unwrap(),
         Err(_) => panic!("pro_product_id not found"),
     };
 
     let pro_monthly_variant_id = match env::var("PRO_MONTHLY_VARIANT_ID") {
-        Ok(id) => id.parse::<u64>().unwrap(),
+        Ok(id) => id.parse::<i64>().unwrap(),
         Err(_) => panic!("pro_monthly_variant_id not found"),
     };
 
     let pro_annually_variant_id = match env::var("PRO_ANNUALLY_VARIANT_ID") {
-        Ok(id) => id.parse::<u64>().unwrap(),
+        Ok(id) => id.parse::<i64>().unwrap(),
         Err(_) => panic!("pro_annually_variant_id not found"),
     };
 
@@ -91,7 +91,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
     let webhooks = Router::new()
         .route(
             "/lemonsqueezy/events/orders",
-            get({
+            post({
                 let app_state = Arc::clone(&app_state);
                 move |(headers, payload): (HeaderMap, Result<Json<OrderEvent>, JsonRejection>)| {
                     orders_webhook_events_listener(headers, payload, app_state)
@@ -100,9 +100,9 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
         )
         .route(
             "/lemonsqueezy/events/subscriptions",
-            get({
+            post({
                 let app_state = Arc::clone(&app_state);
-                move |(headers, payload): (HeaderMap, Result<Json<SubscriptionEvent>, JsonRejection>)| {
+                move |(headers, payload): (HeaderMap, Result<Json<WebhookEventIncoming>, JsonRejection>)| {
                     subscription_webhook_events_listener(headers, payload, app_state)
                 }
             }),

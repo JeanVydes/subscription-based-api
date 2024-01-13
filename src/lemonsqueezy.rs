@@ -21,8 +21,10 @@ pub struct SubscriptionEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Meta {
+    pub test_mode: bool,
     pub event_name: String,
-    pub custom_data: CustomData,
+    pub webhook_id: Option<String>,
+    pub custom_data: Option<CustomData>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,22 +48,22 @@ pub struct OrderData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderAttributes {
-    pub store_id: u64,
-    pub customer_id: u64,
+    pub store_id: i64,
+    pub customer_id: i64,
     pub identifier: String,
-    pub order_number: u64,
+    pub order_number: i64,
     pub user_name: String,
     pub user_email: String,
     pub currency: String,
     pub currency_rate: String,
-    pub subtotal: u64,
-    pub discount_total: u64,
-    pub tax: u64,
-    pub total: u64,
-    pub subtotal_usd: u64,
-    pub discount_total_usd: u64,
-    pub tax_usd: u64,
-    pub total_usd: u64,
+    pub subtotal: i64,
+    pub discount_total: i64,
+    pub tax: i64,
+    pub total: i64,
+    pub subtotal_usd: i64,
+    pub discount_total_usd: i64,
+    pub tax_usd: i64,
+    pub total_usd: i64,
     pub tax_name: String,
     pub tax_rate: String,
     pub status: String,
@@ -80,13 +82,13 @@ pub struct OrderAttributes {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderItem {
-    pub id: u64,
-    pub order_id: u64,
-    pub product_id: u64,
-    pub variant_id: u64,
+    pub id: i64,
+    pub order_id: i64,
+    pub product_id: i64,
+    pub variant_id: i64,
     pub product_name: String,
     pub variant_name: String,
-    pub price: u64,
+    pub price: i64,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: String,
@@ -137,12 +139,12 @@ pub struct SubscriptionData {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SubscriptionAttributes {
-    pub store_id: u64,
-    pub customer_id: u64,
-    pub order_id: u64,
-    pub order_item_id: u64,
-    pub product_id: u64,
-    pub variant_id: u64,
+    pub store_id: i64,
+    pub customer_id: i64,
+    pub order_id: i64,
+    pub order_item_id: i64,
+    pub product_id: i64,
+    pub variant_id: i64,
     pub product_name: String,
     pub variant_name: String,
     pub user_name: String,
@@ -153,8 +155,8 @@ pub struct SubscriptionAttributes {
     pub card_last_four: String,
     pub pause: Option<String>,
     pub cancelled: bool,
-    pub trial_ends_at: String,
-    pub billing_anchor: u64,
+    pub trial_ends_at: Option<String>,
+    pub billing_anchor: i64,
     pub first_subscription_item: FirstSubscriptionItem,
     pub urls: SubscriptionUrls,
     pub renews_at: String,
@@ -166,10 +168,10 @@ pub struct SubscriptionAttributes {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FirstSubscriptionItem {
-    pub id: u64,
-    pub subscription_id: u64,
-    pub price_id: u64,
-    pub quantity: u64,
+    pub id: i64,
+    pub subscription_id: i64,
+    pub price_id: i64,
+    pub quantity: i64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -182,7 +184,7 @@ pub struct SubscriptionUrls {
 
 // Subscription Manager
 pub async fn subscription_created(event: SubscriptionEvent, state: Arc<AppState>) -> Result<(), Json<GenericResponse>> {
-    let customer_id = event.meta.custom_data.customer_id;
+    let customer_id = event.meta.custom_data.unwrap().customer_id;
     let collection: Collection<Account> = state.mongo_db.collection("accounts");
     let filter = doc! {"$or": [
         {"id": &customer_id},
@@ -295,7 +297,7 @@ pub async fn subscription_created(event: SubscriptionEvent, state: Arc<AppState>
 }
 
 pub async fn subscription_updated(event: SubscriptionEvent, state: Arc<AppState>) -> Result<(), Json<GenericResponse>> {
-    let customer_id = event.meta.custom_data.customer_id;
+    let customer_id = event.meta.custom_data.unwrap().customer_id;
     let collection: Collection<Account> = state.mongo_db.collection("accounts");
     let filter = doc! {"$or": [
         {"id": &customer_id},
@@ -377,7 +379,7 @@ pub async fn subscription_updated(event: SubscriptionEvent, state: Arc<AppState>
 
 
 pub async fn subscription_update_status(event: SubscriptionEvent, state: Arc<AppState>) -> Result<(), Json<GenericResponse>> {
-    let customer_id = event.meta.custom_data.customer_id;
+    let customer_id = event.meta.custom_data.unwrap().customer_id;
     let collection: Collection<Account> = state.mongo_db.collection("accounts");
     let filter = doc! {"$or": [
         {"id": &customer_id},
@@ -457,7 +459,7 @@ pub async fn subscription_update_status(event: SubscriptionEvent, state: Arc<App
 }
 
 pub async fn subscription_update_history_logs(event: SubscriptionEvent, state: Arc<AppState>) -> Result<(), Json<GenericResponse>> {
-    let customer_id = event.meta.custom_data.customer_id;
+    let customer_id = event.meta.custom_data.unwrap().customer_id;
     let collection: Collection<Account> = state.mongo_db.collection("accounts");
     let filter = doc! {"$or": [
         {"id": &customer_id},

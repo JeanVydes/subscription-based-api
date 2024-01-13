@@ -1,13 +1,20 @@
-# fly.toml app configuration file generated for 8i-api-winter-fog-4570 on 2024-01-12T15:00:29-05:00
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
-
-app = "8i-api-winter-fog-4570"
+app = "8i-test-machine"
 primary_region = "bog"
+
+[experimental]
+  cmd = ["/bin/app"]
 
 [build]
   dockerfile = "Dockerfile"
+
+[env]
+  API_TOKENS_EXPIRATION_TIME = "86400"
+  HOST = "0.0.0.0"
+  MONGO_DB_NAME = "test"
+  PORT = "8080"
+  PRO_PRODUCT_ID="160756"
+  PRO_MONTHLY_VARIANT_ID="202405"
+  PRO_ANNUALLY_VARIANT_ID="202400"
 
 [http_service]
   internal_port = 8080
@@ -18,10 +25,12 @@ primary_region = "bog"
   processes = ["app"]
 
 [[services]]
+  protocol = ""
+  internal_port = 0
+
   [[services.ports]]
+    port = 8080
     handlers = ["http"]
-    port = "8080"
-    check = "http://0.0.0.0:8080/health"
 
 [[vm]]
   cpu_kind = "shared"

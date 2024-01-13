@@ -10,6 +10,9 @@ pub fn payload_analyzer<T>(
     let payload = match payload_result {
         Ok(payload) => payload,
         Err(err) => {
+            println!("error while analyzing payload");
+            panic!("error payload: {}", err);
+            
             let message = format!("invalid payload: {}", err);
             let json = Json(GenericResponse {
                 message,
