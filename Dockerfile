@@ -1,23 +1,17 @@
-# AI Generated File
-# Use the official Rust image as the base image
-FROM rust:latest
+FROM rust:slim-buster AS builder
 
-# Set the working directory inside the container
-WORKDIR /usr/src/app
+WORKDIR /prod
+COPY Cargo.lock .
+COPY Cargo.toml .
+RUN mkdir .cargo
+# This is the trick to speed up the building process.
+RUN cargo vendor > .cargo/config
 
-# Copy the local Cargo.toml and Cargo.lock files into the container
-COPY Cargo.toml Cargo.lock ./
-
-# Build dependencies (this step is separate to leverage Docker cache)
+COPY . .
 RUN cargo build --release
 
-# Copy the rest of the application code into the container
-COPY . .
-
-# Build the application with a generic executable name
-ARG EXEC_NAME=my_executable
-
-RUN cargo build --release --features "$EXEC_NAME"
-
-# Set the command to run your application
-CMD ["./target/release/my_executable"]
+# Use any runner as you want
+# But beware that some images have old glibc which makes rust unhappy
+FROM fedora:34 AS runner
+EXPOSE 8080
+COPY --from=builder /prod/target/release/eight-i /bin

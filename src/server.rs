@@ -119,6 +119,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
         .allow_origin(Any);
 
     let app = Router::new()
+        .route("/health", get(|| async { "OK" }))
         .nest("/api", api)
         .layer(cors)
         .layer(CompressionLayer::new())
@@ -126,7 +127,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
         .with_state(app_state);
 
     let host = env::var("HOST").unwrap_or_else(|_| String::from("0.0.0.0"));
-    let port = env::var("PORT").unwrap_or_else(|_| String::from("3000"));
+    let port = env::var("PORT").unwrap_or_else(|_| String::from("8080"));
     let address = format!("{}:{}", host, port);
 
     match axum::Server::bind(&address.parse().unwrap())
