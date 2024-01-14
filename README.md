@@ -1,6 +1,11 @@
-# 8i
+# API integrate with LemonSqueezy Template
+# Run
 
-Link In Bio App
+* Fly.io as Hosting Provider (optional)
+* MongoDB Instance (mongodb.com)
+* RedisDB Instance (upstash.io)
+* Set enviroment vars
+* `fly launch`
 
 # .env Template
 

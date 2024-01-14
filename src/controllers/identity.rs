@@ -4,10 +4,9 @@ use crate::token::{create_token, validate_token};
 use crate::types::account::{Account, GenericResponse};
 use crate::types::incoming_requests::SignIn;
 
-use axum::http::{HeaderMap, Request};
-use axum::middleware::Next;
-use axum::response::Response;
-use axum::{extract::rejection::JsonRejection, extract::State, http::StatusCode, Json};
+use axum::http::HeaderMap;
+use axum::{extract::rejection::JsonRejection, http::StatusCode, Json};
+use regex::Regex;
 use std::sync::Arc;
 
 use bcrypt::verify;
@@ -17,12 +16,11 @@ use serde_json::json;
 use mongodb::bson::doc;
 
 // util to verify identity before to access to a private resource
-pub async fn identity_middleware<B>(
-    redis_connection: State<Client>,
-    mut request: Request<B>,
-    next: Next<B>,
-) -> Result<Response, (StatusCode, Json<GenericResponse>)> {
-    let token = match request.headers().get("Authorization") {
+pub async fn get_user_id_from_req(
+    headers: HeaderMap,
+    redis_connection: Client,
+) -> Result<String, (StatusCode, Json<GenericResponse>)> {
+    let token = match headers.get("Authorization") {
         Some(token) => token,
         None => {
             return Err((
@@ -66,9 +64,9 @@ pub async fn identity_middleware<B>(
 
     let result = redis_connection
         .clone()
-        .get::<String, u64>(token_string.to_string());
+        .get::<String, String>(token_string.to_string());
 
-    let id: u64 = match result {
+    let id: String = match result {
         Ok(id) => id,
         Err(err) => {
             return Err((
@@ -82,10 +80,7 @@ pub async fn identity_middleware<B>(
         }
     };
 
-    request.extensions_mut().insert(id);
-
-    let response = next.run(request).await;
-    Ok(response)
+    Ok(id)
 }
 
 pub async fn get_session(
@@ -184,14 +179,32 @@ pub async fn request_credentials(
         Err((status_code, json)) => return (status_code, json),
     };
 
+    let email_re = Regex::new(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$").unwrap();
+    if !email_re.is_match(&payload.email) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(GenericResponse {
+                message: String::from("invalid email"),
+                data: json!({}),
+                exited_code: 1,
+            }),
+        );
+    }
+
+    let filter = doc! {"$or": [
+        {
+            "emails": {
+                "$elemMatch": {
+                    "address": payload.email.clone(),
+                }
+            }
+        }
+    ]};
+
     let accounts_collection = state.mongo_db.collection("accounts");
     let account: Account = match accounts_collection
         .find_one(
-            doc! {"$or":
-                [
-                    {"email": &payload.email.to_lowercase()}
-                ]
-            },
+            filter,
             None,
         )
         .await

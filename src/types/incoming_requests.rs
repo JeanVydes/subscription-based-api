@@ -15,3 +15,20 @@ pub struct CreateAccount {
     pub class: String,
     pub accepted_terms: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountUpdateName {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountUpdatePassword {
+    pub old_password: String,
+    pub new_password: String,
+    pub new_password_confirmation: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountAddEmail {
+    pub email: String,
+}

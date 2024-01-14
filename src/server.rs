@@ -1,14 +1,14 @@
 use crate::{
     controllers::account::create_account,
-    controllers::identity::{get_session, request_credentials},
+    controllers::{identity::{get_session, request_credentials}, account::{update_name, update_password, add_email}},
     helpers::fallback,
     lemonsqueezy::webhook::{orders_webhook_events_listener, subscription_webhook_events_listener},
-    types::lemonsqueezy::{OrderEvent, SubscriptionEvent, Products},
+    types::{lemonsqueezy::{OrderEvent, SubscriptionEvent, Products}, incoming_requests::{AccountUpdateName, AccountUpdatePassword, AccountAddEmail}},
 };
 use axum::{
     extract::rejection::JsonRejection,
     http::{HeaderMap, Method},
-    routing::{get, post},
+    routing::{get, post, patch},
     Json, Router,
 };
 use mongodb::{Client as MongoClient, Database};
@@ -34,12 +34,41 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
     // /api/accounts
     let accounts = Router::new()
         .route(
-            "/account",
+            "/create",
             post({
                 let app_state = Arc::clone(&app_state);
                 move |payload| create_account(payload, app_state)
             }),
         );
+
+    let accounts_actions = Router::new()
+        .route(
+            "/update/name",
+            patch({
+                let app_state = Arc::clone(&app_state);
+                move |(headers, payload): (HeaderMap, Result<Json<AccountUpdateName>, JsonRejection>)| {
+                    update_name(headers, payload, app_state)
+                };
+            }),
+        )
+        .route(
+            "/update/password",
+            patch({
+                let app_state = Arc::clone(&app_state);
+                move |(headers, payload): (HeaderMap, Result<Json<AccountUpdatePassword>, JsonRejection>)| {
+                    update_password(headers, payload, app_state)
+                };
+            }),
+        )
+        .route(
+            "/add/email",
+            patch({
+                let app_state = Arc::clone(&app_state);
+                move |(headers, payload): (HeaderMap, Result<Json<AccountAddEmail>, JsonRejection>)| {
+                    add_email(headers, payload, app_state)
+                };
+            }),
+        ); // multiple emails only for managers
 
     // /api/identity
     let identity = Router::new()
@@ -54,7 +83,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
             "/session",
             get({
                 let app_state = Arc::clone(&app_state);
-                move |payload| get_session(payload, app_state)
+                move |headers| get_session(headers, app_state)
             }),
         );
 
@@ -85,6 +114,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
     // /api
     let api = Router::new()
         .nest("/accounts", accounts)
+        .nest("/my-account", accounts_actions)
         .nest("/identity", identity)
         .nest("/webhooks", webhooks);
 
