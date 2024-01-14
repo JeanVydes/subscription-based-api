@@ -19,7 +19,7 @@ use mongodb::bson::doc;
 // util to verify identity before to access to a private resource
 pub async fn identity_middleware<B>(
     redis_connection: State<Client>,
-    request: Request<B>,
+    mut request: Request<B>,
     next: Next<B>,
 ) -> Result<Response, (StatusCode, Json<GenericResponse>)> {
     let token = match request.headers().get("Authorization") {
@@ -50,7 +50,7 @@ pub async fn identity_middleware<B>(
         }
     };
 
-    match validate_token(&token_string.to_string()) {
+    match validate_token(token_string) {
         Ok(_) => (),
         Err(_) => {
             return Err((
@@ -67,6 +67,7 @@ pub async fn identity_middleware<B>(
     let result = redis_connection
         .clone()
         .get::<String, u64>(token_string.to_string());
+
     let id: u64 = match result {
         Ok(id) => id,
         Err(err) => {
@@ -81,7 +82,7 @@ pub async fn identity_middleware<B>(
         }
     };
 
-    println!("id: {}", id);
+    request.extensions_mut().insert(id);
 
     let response = next.run(request).await;
     Ok(response)
@@ -119,7 +120,7 @@ pub async fn get_session(
         }
     };
 
-    match validate_token(&token_string.to_string()) {
+    match validate_token(token_string) {
         Ok(_) => (),
         Err(_) => {
             return (

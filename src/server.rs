@@ -1,6 +1,6 @@
 use crate::{
     controllers::account::create_account,
-    controllers::identity::{get_session, identity_middleware, request_credentials},
+    controllers::identity::{get_session, request_credentials},
     helpers::fallback,
     lemonsqueezy::webhook::{orders_webhook_events_listener, subscription_webhook_events_listener},
     types::lemonsqueezy::{OrderEvent, SubscriptionEvent, Products},
@@ -8,7 +8,6 @@ use crate::{
 use axum::{
     extract::rejection::JsonRejection,
     http::{HeaderMap, Method},
-    middleware,
     routing::{get, post},
     Json, Router,
 };
@@ -30,6 +29,92 @@ pub struct AppState {
 }
 
 pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
+    let app_state = set_app_state(mongodb_client, redis_client).await;
+
+    // /api/accounts
+    let accounts = Router::new()
+        .route(
+            "/account",
+            post({
+                let app_state = Arc::clone(&app_state);
+                move |payload| create_account(payload, app_state)
+            }),
+        );
+
+    // /api/identity
+    let identity = Router::new()
+        .route(
+            "/session",
+            post({
+                let app_state = Arc::clone(&app_state);
+                move |payload| request_credentials(payload, app_state)
+            }),
+        )
+        .route(
+            "/session",
+            get({
+                let app_state = Arc::clone(&app_state);
+                move |payload| get_session(payload, app_state)
+            }),
+        );
+
+    // /api/webhooks
+    let webhooks = Router::new()
+        .route(
+            "/lemonsqueezy/events/orders",
+            post({
+                let app_state = Arc::clone(&app_state);
+                move |(headers, payload): (HeaderMap, Result<Json<OrderEvent>, JsonRejection>)| {
+                    orders_webhook_events_listener(headers, payload, app_state)
+                }
+            }),
+        )
+        .route(
+            "/lemonsqueezy/events/subscriptions",
+            post({
+                let app_state = Arc::clone(&app_state);
+                move |(headers, payload): (
+                    HeaderMap,
+                    Result<Json<SubscriptionEvent>, JsonRejection>,
+                )| {
+                    subscription_webhook_events_listener(headers, payload, app_state)
+                }
+            }),
+        );
+
+    // /api
+    let api = Router::new()
+        .nest("/accounts", accounts)
+        .nest("/identity", identity)
+        .nest("/webhooks", webhooks);
+
+    let cors = CorsLayer::new()
+        .allow_credentials(false)
+        .allow_methods([Method::GET, Method::POST, Method::DELETE])
+        .allow_origin(Any);
+
+    let app = Router::new()
+        .route("/health", get(|| async { "OK" }))
+        .nest("/api", api)
+        .layer(cors)
+        .layer(CompressionLayer::new())
+        .fallback(fallback)
+        .with_state(app_state);
+
+    let host = env::var("HOST").unwrap_or_else(|_| String::from("0.0.0.0"));
+    let port = env::var("PORT").unwrap_or_else(|_| String::from("8080"));
+    let address = format!("{}:{}", host, port);
+
+    match axum::Server::bind(&address.parse().unwrap())
+        .serve(app.into_make_service())
+        .await
+    {
+        Ok(_) => {},
+        Err(e) => panic!("Error starting server: {}", e),
+    };
+}
+
+pub async fn set_app_state(mongodb_client: MongoClient, redis_client: RedisClient) -> Arc<AppState> {
     let mongo_db = match env::var("MONGO_DB_NAME") {
         Ok(db) => db,
         Err(_) => panic!("mongo_db_name not found"),
@@ -70,85 +155,5 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
         products,
     });
 
-    let accounts = Router::new()
-        .route(
-            "/account",
-            post({
-                let app_state = Arc::clone(&app_state);
-                move |payload| create_account(payload, app_state)
-            }),
-        )
-        .route_layer(middleware::from_fn_with_state(
-            app_state.redis_connection.clone(),
-            identity_middleware,
-        ));
-
-    let identity = Router::new()
-        .route(
-            "/session",
-            post({
-                let app_state = Arc::clone(&app_state);
-                move |payload| request_credentials(payload, app_state)
-            }),
-        )
-        .route(
-            "/session",
-            get({
-                let app_state = Arc::clone(&app_state);
-                move |payload| get_session(payload, app_state)
-            }),
-        );
-
-    let webhooks = Router::new()
-        .route(
-            "/lemonsqueezy/events/orders",
-            post({
-                let app_state = Arc::clone(&app_state);
-                move |(headers, payload): (HeaderMap, Result<Json<OrderEvent>, JsonRejection>)| {
-                    orders_webhook_events_listener(headers, payload, app_state)
-                }
-            }),
-        )
-        .route(
-            "/lemonsqueezy/events/subscriptions",
-            post({
-                let app_state = Arc::clone(&app_state);
-                move |(headers, payload): (
-                    HeaderMap,
-                    Result<Json<SubscriptionEvent>, JsonRejection>,
-                )| {
-                    subscription_webhook_events_listener(headers, payload, app_state)
-                }
-            }),
-        );
-
-    let api = Router::new()
-        .nest("/accounts", accounts)
-        .nest("/identity", identity)
-        .nest("/webhooks", webhooks);
-
-    let cors = CorsLayer::new()
-        .allow_credentials(false)
-        .allow_methods([Method::GET, Method::POST, Method::DELETE])
-        .allow_origin(Any);
-
-    let app = Router::new()
-        .route("/health", get(|| async { "OK" }))
-        .nest("/api", api)
-        .layer(cors)
-        .layer(CompressionLayer::new())
-        .fallback(fallback)
-        .with_state(app_state);
-
-    let host = env::var("HOST").unwrap_or_else(|_| String::from("0.0.0.0"));
-    let port = env::var("PORT").unwrap_or_else(|_| String::from("8080"));
-    let address = format!("{}:{}", host, port);
-
-    match axum::Server::bind(&address.parse().unwrap())
-        .serve(app.into_make_service())
-        .await
-    {
-        Ok(_) => println!("Server running on {}", address),
-        Err(e) => println!("Error starting server: {}", e),
-    };
+    return app_state;
 }

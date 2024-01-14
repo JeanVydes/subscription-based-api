@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use mongodb::{
-    bson::{doc, to_bson, Bson},
+    bson::{self, doc, to_bson, Bson, Document},
     Collection,
 };
 use serde_json::json;
@@ -23,11 +23,18 @@ pub async fn subscription_created(
 ) -> Result<(), Json<GenericResponse>> {
     let customer_id = event.meta.custom_data.unwrap().customer_id;
     let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let filter = doc! {"$or": [
+    let customer_filter = doc! {"$or": [
         {"id": &customer_id},
+        {
+            "emails": {
+                "$elemMatch": {
+                    "address": event.data.attributes.user_email,
+                }
+            }
+        }
     ]};
 
-    let customer = match collection.find_one(filter, None).await {
+    let customer = match collection.find_one(customer_filter.clone(), None).await {
         Ok(account) => match account {
             Some(acc) => acc,
             None => {
@@ -76,7 +83,8 @@ pub async fn subscription_created(
         Some(ends_at) => ends_at,
         None => "".to_string(),
     };
-
+    
+    println!("updating subscription");
     let update_subscription = Subscription {
         id: subscription_id,
         product_id: event.data.attributes.product_id,
@@ -96,28 +104,24 @@ pub async fn subscription_created(
         Ok(Bson::Document(document)) => document,
         _ => {
             return Err(Json(GenericResponse {
-                message: String::from("error converting suscription struct to bson"),
+                message: String::from("error converting subscription struct to bson"),
                 data: json!({}),
                 exited_code: 1,
             }))
         }
     };
 
-    let filter = doc! {"$or": [
-        {"id": &customer_id},
-    ]};
-
-    let update = doc! {"$set": {
+    let update = doc! {
         "$set": doc!{
-            "suscription": update_subscription
+            "subscription": update_subscription
         },
-    }};
+    };
 
-    match collection.update_one(filter, update, None).await {
+    match collection.update_one(customer_filter, update, None).await {
         Ok(_) => {}
         Err(_) => {
             return Err(Json(GenericResponse {
-                message: String::from("error updating customer suscription"),
+                message: String::from("error updating customer subscription"),
                 data: json!({}),
                 exited_code: 1,
             }))
@@ -133,11 +137,18 @@ pub async fn subscription_updated(
 ) -> Result<(), Json<GenericResponse>> {
     let customer_id = event.meta.custom_data.unwrap().customer_id;
     let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let filter = doc! {"$or": [
+    let customer_filter = doc! {"$or": [
         {"id": &customer_id},
+        {
+            "emails": {
+                "$elemMatch": {
+                    "address": event.data.attributes.user_email,
+                }
+            }
+        }
     ]};
 
-    let customer = match collection.find_one(filter, None).await {
+    let customer = match collection.find_one(customer_filter.clone(), None).await {
         Ok(account) => match account {
             Some(acc) => acc,
             None => {
@@ -163,37 +174,31 @@ pub async fn subscription_updated(
         date: event.data.attributes.updated_at.clone(),
     });
 
-    let bson_history_logs = match to_bson(&history_logs) {
-        Ok(Bson::Document(document)) => document,
-        _ => {
-            return Err(Json(GenericResponse {
-                message: String::from("error converting suscription struct to bson"),
-                data: json!({}),
-                exited_code: 1,
-            }))
+    let bson_history_logs: Vec<Document> = history_logs.iter()
+    .map(|log| {
+        match bson::to_document(log) {
+            Ok(document) => document,
+            Err(_) => {
+                return Document::new();
+            }
         }
+    })
+    .collect();
+
+    let update = doc! {
+        "$set": doc!{
+            "subscription.variant_id": event.data.attributes.variant_id as i64,
+            "subscription.status": event.data.attributes.status,
+            "subscription.updated_at": event.data.attributes.updated_at,
+            "subscription.history_logs": bson_history_logs,
+        },
     };
 
-    let filter = doc! {"$or": [
-        {"id": &customer_id},
-    ]};
-
-    let update = doc! {"$set": {
-        "$set": doc!{
-            "subscription": doc!{
-                "variant_id": event.data.attributes.variant_id as i64,
-                "status": event.data.attributes.status,
-                "updated_at": event.data.attributes.updated_at,
-                "history_logs": bson_history_logs,
-            },
-        },
-    }};
-
-    match collection.update_one(filter, update, None).await {
+    match collection.update_one(customer_filter, update, None).await {
         Ok(_) => {}
         Err(_) => {
             return Err(Json(GenericResponse {
-                message: String::from("error updating customer suscription"),
+                message: String::from("error updating customer subscription"),
                 data: json!({}),
                 exited_code: 1,
             }))
@@ -203,17 +208,25 @@ pub async fn subscription_updated(
     Ok(())
 }
 
+// ready
 pub async fn subscription_update_status(
     event: SubscriptionEvent,
     state: Arc<AppState>,
 ) -> Result<(), Json<GenericResponse>> {
     let customer_id = event.meta.custom_data.unwrap().customer_id;
     let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let filter = doc! {"$or": [
+    let customer_filter = doc! {"$or": [
         {"id": &customer_id},
+        {
+            "emails": {
+                "$elemMatch": {
+                    "address": event.data.attributes.user_email,
+                }
+            }
+        }
     ]};
 
-    let customer = match collection.find_one(filter, None).await {
+    let customer = match collection.find_one(customer_filter.clone(), None).await {
         Ok(account) => match account {
             Some(acc) => acc,
             None => {
@@ -239,36 +252,30 @@ pub async fn subscription_update_status(
         date: event.data.attributes.updated_at.clone(),
     });
 
-    let bson_history_logs = match to_bson(&history_logs) {
-        Ok(Bson::Document(document)) => document,
-        _ => {
-            return Err(Json(GenericResponse {
-                message: String::from("error converting suscription struct to bson"),
-                data: json!({}),
-                exited_code: 1,
-            }))
+    let bson_history_logs: Vec<Document> = history_logs.iter()
+    .map(|log| {
+        match bson::to_document(log) {
+            Ok(document) => document,
+            Err(_) => {
+                return Document::new();
+            }
         }
+    })
+    .collect();
+
+    let update = doc! {
+        "$set": doc!{
+            "subscription.status": event.data.attributes.status.clone(),
+            "subscription.updated_at": event.data.attributes.updated_at,
+            "subscription.history_logs": bson_history_logs,
+        },
     };
 
-    let filter = doc! {"$or": [
-        {"id": &customer_id},
-    ]};
-
-    let update = doc! {"$set": {
-        "$set": doc!{
-            "subscription": doc!{
-                "status": event.data.attributes.status,
-                "updated_at": event.data.attributes.updated_at,
-                "history_logs": bson_history_logs,
-            },
-        },
-    }};
-
-    match collection.update_one(filter, update, None).await {
+    match collection.update_one(customer_filter, update, None).await {
         Ok(_) => {}
         Err(_) => {
             return Err(Json(GenericResponse {
-                message: String::from("error updating customer suscription"),
+                message: String::from("error updating customer subscription"),
                 data: json!({}),
                 exited_code: 1,
             }))
@@ -284,11 +291,18 @@ pub async fn subscription_update_history_logs(
 ) -> Result<(), Json<GenericResponse>> {
     let customer_id = event.meta.custom_data.unwrap().customer_id;
     let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let filter = doc! {"$or": [
+    let customer_filter = doc! {"$or": [
         {"id": &customer_id},
+        {
+            "emails": {
+                "$elemMatch": {
+                    "address": event.data.attributes.user_email,
+                }
+            }
+        }
     ]};
 
-    let customer = match collection.find_one(filter, None).await {
+    let customer = match collection.find_one(customer_filter.clone(), None).await {
         Ok(account) => match account {
             Some(acc) => acc,
             None => {
@@ -314,35 +328,27 @@ pub async fn subscription_update_history_logs(
         date: event.data.attributes.updated_at.clone(),
     });
 
-    let bson_history_logs = match to_bson(&history_logs) {
-        Ok(Bson::Document(document)) => document,
-        _ => {
-            return Err(Json(GenericResponse {
-                message: String::from("error converting suscription struct to bson"),
-                data: json!({}),
-                exited_code: 1,
-            }))
+    let bson_history_logs: Vec<Document> = history_logs.iter()
+    .map(|log| {
+        match bson::to_document(log) {
+            Ok(document) => document,
+            Err(_) => return Document::new(),
         }
+    })
+    .collect();
+
+    let update = doc!  {
+        "$set": doc!{
+            "subscription.updated_at": event.data.attributes.updated_at,
+            "subscription.history_logs": bson_history_logs,
+        },
     };
 
-    let filter = doc! {"$or": [
-        {"id": &customer_id},
-    ]};
-
-    let update = doc! {"$set": {
-        "$set": doc!{
-            "subscription": doc!{
-                "updated_at": event.data.attributes.updated_at,
-                "history_logs": bson_history_logs,
-            },
-        },
-    }};
-
-    match collection.update_one(filter, update, None).await {
+    match collection.update_one(customer_filter, update, None).await {
         Ok(_) => {}
         Err(_) => {
             return Err(Json(GenericResponse {
-                message: String::from("error updating customer suscription"),
+                message: String::from("error updating customer subscription"),
                 data: json!({}),
                 exited_code: 1,
             }))

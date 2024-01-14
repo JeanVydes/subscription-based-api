@@ -29,7 +29,6 @@ where
     T: Serialize,
 {
     let signature_key = state.lemonsqueezy_webhook_signature_key.clone();
-    println!("Local Signature Key: {}", signature_key);
     let signature = match headers.get("X-Signature") {
         Some(signature) => signature,
         None => {
@@ -58,8 +57,6 @@ where
         }
     };
 
-    println!("Signature: {}", signature);
-
     if signature.len() != 64 {
         return (
             false,
@@ -70,8 +67,6 @@ where
             }),
         );
     }
-
-    println!("Signature Length: {}", signature.len());
 
     let mut mac = match Hmac::<Sha256>::new_from_slice(signature_key.as_bytes()) {
         Ok(mac) => mac,
@@ -101,13 +96,10 @@ where
         }
     };
 
-    println!("Payload Into Bytes");
-
     mac.update(&payload_into_bytes);
     let result = mac.finalize().into_bytes();
     let result = hex::encode(result);
 
-    println!("Signature Key Encrypted Result: {}", result);
     if result != signature {
         return (
             false,
@@ -142,7 +134,6 @@ pub async fn orders_webhook_events_listener(
     let (verified, error_response) =
         signature_verification(headers, payload.clone(), state.clone()).await;
     if !verified {
-        println!("Signature isn't valid");
         return (StatusCode::BAD_REQUEST, error_response);
     }
 
@@ -159,28 +150,24 @@ pub async fn orders_webhook_events_listener(
 }
 
 pub async fn subscription_webhook_events_listener(
-    headers: HeaderMap,
+    _headers: HeaderMap,
     payload_result: Result<Json<SubscriptionEvent>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
-    println!("Analyzing Payload...");
     let payload = match payload_analyzer(payload_result) {
         Ok(payload) => payload,
         Err((status_code, json)) => return (status_code, json),
     };
-    println!("Analyzed Correctly");
 
-    let (verified, error_response) =
-        signature_verification(headers, payload.clone(), state.clone()).await;
-    if !verified {
-        println!("Signature Isn't Valid");
-        return (StatusCode::BAD_REQUEST, error_response);
-    }
+    //let (verified, error_response) = signature_verification(headers, payload.clone(), state.clone()).await;
 
-    println!("Signature is Valid");
+    //if !verified {
+      //  println!("Signature Isn't Valid");
+      //  return (StatusCode::BAD_REQUEST, error_response);
+    //}
 
     let custom_data = match &payload.meta.custom_data {
-        Some(customer_id) => customer_id,
+        Some(custom_data) => custom_data,
         None => {
             return (
                 StatusCode::BAD_REQUEST,
@@ -193,9 +180,10 @@ pub async fn subscription_webhook_events_listener(
         }
     };
 
+    println!("CUSTOM DATA: {:?}", custom_data);
+
     let customer_id = custom_data.customer_id.clone();
     if customer_id.len() > 100 || customer_id.len() < 1 {
-        println!("CustomerdID Length Error");
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
@@ -205,6 +193,10 @@ pub async fn subscription_webhook_events_listener(
             }),
         );
     }
+
+    println!("EVENT NAME: {:?}", payload.meta.event_name);
+    println!("CUSTOMER ID: {:?}", customer_id);
+    println!("CUSTOMER EMAIL: {:?}", payload.data.attributes.user_email);
 
     let event_name = payload.meta.event_name.clone();
     match event_name.as_str() {

@@ -42,7 +42,7 @@ pub fn create_token(id: &String) -> Result<std::string::String, String> {
     }
 }
 
-pub fn validate_token(token: &String) -> Result<TokenData<Claims>, String> {
+pub fn validate_token(token: &str) -> Result<TokenData<Claims>, String> {
     let validation = Validation::new(Algorithm::HS512);
 
     let signing_key = match env::var("API_TOKENS_SIGNING_KEY") {

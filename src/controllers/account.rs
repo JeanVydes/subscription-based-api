@@ -1,6 +1,6 @@
 use crate::helpers::{payload_analyzer, random_string};
 use crate::types::account::{Account, AccountType, Email, Preferences};
-use crate::types::incoming_requests::SignUp;
+use crate::types::incoming_requests::CreateAccount;
 use crate::types::subscription::{Slug, Subscription, SubscriptionFrequencyClass};
 use crate::{server::AppState, types::account::GenericResponse};
 
@@ -14,13 +14,24 @@ use std::sync::Arc;
 use bcrypt::{hash, DEFAULT_COST};
 
 pub async fn create_account(
-    payload_result: Result<Json<SignUp>, JsonRejection>,
+    payload_result: Result<Json<CreateAccount>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
     let payload = match payload_analyzer(payload_result) {
         Ok(payload) => payload,
         Err((status_code, json)) => return (status_code, json),
     };
+
+    if !payload.accepted_terms {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(GenericResponse {
+                message: String::from("you must accept the terms of service and privacy"),
+                data: json!({}),
+                exited_code: 1,
+            }),
+        );
+    }
 
     if payload.name.len() < 2 || payload.name.len() > 25 {
         return (

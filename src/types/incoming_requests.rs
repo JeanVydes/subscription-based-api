@@ -7,10 +7,11 @@ pub struct SignIn {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignUp {
+pub struct CreateAccount {
     pub name: String,
     pub email: String,
     pub password: String,
     pub password_confirmation: String,
     pub class: String,
+    pub accepted_terms: bool,
 }
