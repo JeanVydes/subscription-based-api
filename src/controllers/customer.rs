@@ -1,13 +1,14 @@
-use crate::helpers::{payload_analyzer, random_string};
-use crate::types::account::{Account, AccountType, Email, Preferences};
-use crate::types::incoming_requests::{CreateAccount, AccountUpdateName, AccountUpdatePassword, AccountAddEmail};
+use crate::utilities::helpers::{payload_analyzer, random_string, valid_password, valid_email, parse_class};
+use crate::storage::mongo::{build_customer_filter, find_customer, update_customer};
+use crate::types::customer::{Customer, Email, Preferences};
+use crate::types::incoming_requests::{CreateCustomerRecord, CustomerUpdateName, CustomerUpdatePassword, CustomerAddEmail};
 use crate::types::subscription::{Slug, Subscription, SubscriptionFrequencyClass};
-use crate::{server::AppState, types::account::GenericResponse};
+use crate::{server::AppState, types::customer::GenericResponse};
 
 use axum::http::HeaderMap;
 use axum::{extract::rejection::JsonRejection, http::StatusCode, Json};
 use chrono::Utc;
-use mongodb::{bson::doc, Collection};
+use mongodb::bson::doc;
 use regex::Regex;
 use serde_json::json;
 use std::sync::Arc;
@@ -16,8 +17,8 @@ use bcrypt::{hash, DEFAULT_COST};
 
 use super::identity::get_user_id_from_req;
 
-pub async fn create_account(
-    payload_result: Result<Json<CreateAccount>, JsonRejection>,
+pub async fn create_customer_record(
+    payload_result: Result<Json<CreateCustomerRecord>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
     let payload = match payload_analyzer(payload_result) {
@@ -47,54 +48,15 @@ pub async fn create_account(
         );
     }
 
-    if payload.email.len() < 5 || payload.email.len() > 100 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(GenericResponse {
-                message: String::from(
-                    "invalid email, must be at least 5 characters and at most 100",
-                ),
-                data: json!({}),
-                exited_code: 1,
-            }),
-        );
-    }
+    match valid_email(&payload.email).await {
+        Ok(_) => (),
+        Err((status_code, json)) => return (status_code, json),
+    };
 
-    if payload.password.len() < 8 || payload.password.len() > 100 {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(GenericResponse {
-                message: String::from("invalid password, must be at least 8 characters"),
-                data: json!({}),
-                exited_code: 1,
-            }),
-        );
-    }
-
-    let email_re = Regex::new(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$").unwrap();
-    let password_re = Regex::new(r"^[a-zA-Z0-9_]{8,20}$").unwrap();
-
-    if !email_re.is_match(&payload.email) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(GenericResponse {
-                message: String::from("invalid email"),
-                data: json!({}),
-                exited_code: 1,
-            }),
-        );
-    }
-
-    if !password_re.is_match(&payload.password) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(GenericResponse {
-                message: String::from("invalid password"),
-                data: json!({}),
-                exited_code: 1,
-            }),
-        );
-    }
+    match valid_password(&payload.password).await {
+        Ok(_) => (),
+        Err((status_code, json)) => return (status_code, json),
+    };
 
     if payload.password != payload.password_confirmation {
         return (
@@ -118,35 +80,21 @@ pub async fn create_account(
         );
     }
 
-    let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let filter = doc! {"$or": [
-        {"email": &payload.email.to_lowercase()},
-    ]};
+    let filter = build_customer_filter("", payload.email.to_lowercase().as_str()).await;
+    let (found, _) = match find_customer(state.mongo_db.clone(), filter).await {
+        Ok(customer) => customer,
+        Err((status, json)) => return (status, json)
+    };
 
-    match collection.find_one(filter, None).await {
-        Ok(account) => match account {
-            Some(_) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(GenericResponse {
-                        message: String::from("email already taken"),
-                        data: json!({}),
-                        exited_code: 1,
-                    }),
-                )
-            }
-            None => (),
-        },
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(GenericResponse {
-                    message: String::from("error checking email availability"),
-                    data: json!({}),
-                    exited_code: 1,
-                }),
-            )
-        }
+    if found {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(GenericResponse {
+                message: String::from("email already taken"),
+                data: json!({}),
+                exited_code: 1,
+            }),
+        );
     }
 
     let hashed_password = match hash(&payload.password, DEFAULT_COST) {
@@ -169,21 +117,10 @@ pub async fn create_account(
         main: true,
     }];
 
-    let class: AccountType;
-    if payload.class == "personal" {
-        class = AccountType::PERSONAL;
-    } else if payload.class == "manager" {
-        class = AccountType::MANAGER;
-    } else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(GenericResponse {
-                message: String::from("invalid account type"),
-                data: json!({}),
-                exited_code: 1,
-            }),
-        );
-    }
+    let class = match parse_class(&payload.class).await {
+        Ok(class) => class,
+        Err((status_code, json)) => return (status_code, json),
+    };
 
     let current_datetime = Utc::now();
     let iso8601_string = current_datetime.to_rfc3339();
@@ -204,7 +141,7 @@ pub async fn create_account(
     };
 
     let id = random_string(30).await;
-    let account = Account {
+    let customer = Customer {
         id,
         name: payload.name.clone(),
         class,
@@ -225,7 +162,8 @@ pub async fn create_account(
         deleted: false,
     };
 
-    match collection.insert_one(account.clone(), None).await {
+    let collection = state.mongo_db.collection("customers");
+    match collection.insert_one(customer.clone(), None).await {
         Ok(_) => (),
         Err(_) => {
             return (
@@ -242,8 +180,8 @@ pub async fn create_account(
     (
         StatusCode::CREATED,
         Json(GenericResponse {
-            message: String::from("account registered successfully"),
-            data: json!(account),
+            message: String::from("customer record registered successfully"),
+            data: json!(customer),
             exited_code: 0,
         }),
     )
@@ -251,7 +189,7 @@ pub async fn create_account(
 
 pub async fn update_name(
     headers: HeaderMap,
-    payload_result: Result<Json<AccountUpdateName>, JsonRejection>,
+    payload_result: Result<Json<CustomerUpdateName>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
     let customer_id = match get_user_id_from_req(headers, state.redis_connection.clone()).await {
@@ -275,36 +213,24 @@ pub async fn update_name(
         );
     }
 
-    let filter = doc! {"id": &customer_id};
-    let collection: Collection<Account> = state.mongo_db.collection("accounts");
+    let filter = build_customer_filter(customer_id.as_str(), "").await;
     let update = doc! {"$set": {"name": &payload.name}};
-    match collection.update_one(filter, update, None).await {
-        Ok(_) => (),
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(GenericResponse {
-                    message: String::from("error updating record in database"),
-                    data: json!({}),
-                    exited_code: 1,
-                }),
-            )
-        }
+    match update_customer(state.mongo_db.clone(), filter, update).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(GenericResponse {
+                message: String::from("customer name updated successfully"),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        ),
+        Err((status, json)) => return (status, json)
     }
-
-    (
-        StatusCode::OK,
-        Json(GenericResponse {
-            message: String::from("account name updated successfully"),
-            data: json!({}),
-            exited_code: 0,
-        }),
-    )
 }
 
 pub async fn update_password(
     headers: HeaderMap,
-    payload_result: Result<Json<AccountUpdatePassword>, JsonRejection>,
+    payload_result: Result<Json<CustomerUpdatePassword>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
     let customer_id = match get_user_id_from_req(headers, state.redis_connection.clone()).await {
@@ -312,36 +238,22 @@ pub async fn update_password(
         Err((status_code, json)) => return (status_code, json),
     };
 
-    let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let filter = doc! {"$or": [
-        {"id": customer_id.clone()},
-    ]};
-
-    let customer = match collection.find_one(filter, None).await {
-        Ok(account) => match account {
-            Some(account) => account,
-            None => {
-                return (
-                    StatusCode::NOT_FOUND,
-                    Json(GenericResponse {
-                        message: String::from("customer not found"),
-                        data: json!({}),
-                        exited_code: 1,
-                    }),
-                )
-            }
-        },
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(GenericResponse {
-                    message: String::from("error fetching customer"),
-                    data: json!({}),
-                    exited_code: 1,
-                }),
-            )
-        },
+    let filter = build_customer_filter(customer_id.as_str(), "").await;
+    let (found, customer) = match find_customer(state.mongo_db.clone(), filter).await {
+        Ok(customer) => customer,
+        Err((status, json)) => return (status, json)
     };
+
+    if !found {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(GenericResponse {
+                message: String::from("customer not found"),
+                data: json!({}),
+                exited_code: 1,
+            }),
+        );
+    }
 
     let payload = match payload_analyzer(payload_result) {
         Ok(payload) => payload,
@@ -432,6 +344,7 @@ pub async fn update_password(
         }
     };
 
+    let customer = customer.unwrap();
     if customer.password != hashed_old_password {
         return (
             StatusCode::BAD_REQUEST,
@@ -443,79 +356,54 @@ pub async fn update_password(
         );
     }
 
-    let filter = doc! {"id": &customer_id};
-    let collection: Collection<Account> = state.mongo_db.collection("accounts");
+    let filter = build_customer_filter(customer_id.as_str(), "").await;
     let update = doc! {"$set": {"password": hashed_new_password}};
-    match collection.update_one(filter, update, None).await {
-        Ok(_) => (),
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(GenericResponse {
-                    message: String::from("error updating record in database"),
-                    data: json!({}),
-                    exited_code: 1,
-                }),
-            )
-        }
+    match update_customer(state.mongo_db.clone(), filter, update).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(GenericResponse {
+                message: String::from("customer password updated successfully"),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        ),
+        Err((status, json)) => return (status, json)
     }
-
-    (
-        StatusCode::OK,
-        Json(GenericResponse {
-            message: String::from("account password updated successfully"),
-            data: json!({}),
-            exited_code: 0,
-        }),
-    )
 }
 
 pub async fn add_email(
     headers: HeaderMap,
-    payload_result: Result<Json<AccountAddEmail>, JsonRejection>,
+    payload_result: Result<Json<CustomerAddEmail>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
-    let customer_id = match get_user_id_from_req(headers, state.redis_connection.clone()).await {
-        Ok(customer_id) => customer_id,
-        Err((status_code, json)) => return (status_code, json),
-    };
-
-    let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let filter = doc! {"$or": [
-        {"id": customer_id.clone()},
-    ]};
-
-    let customer = match collection.find_one(filter, None).await {
-        Ok(account) => match account {
-            Some(account) => account,
-            None => {
-                return (
-                    StatusCode::NOT_FOUND,
-                    Json(GenericResponse {
-                        message: String::from("customer not found"),
-                        data: json!({}),
-                        exited_code: 1,
-                    }),
-                )
-            }
-        },
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(GenericResponse {
-                    message: String::from("error fetching customer"),
-                    data: json!({}),
-                    exited_code: 1,
-                }),
-            )
-        },
-    };
-
     let payload = match payload_analyzer(payload_result) {
         Ok(payload) => payload,
         Err((status_code, json)) => return (status_code, json),
     };
 
+    let customer_id = match get_user_id_from_req(headers, state.redis_connection.clone()).await {
+        Ok(customer_id) => customer_id,
+        Err((status_code, json)) => return (status_code, json),
+    };
+
+    let filter = build_customer_filter(customer_id.as_str(), "").await;
+    let (found, customer) = match find_customer(state.mongo_db.clone(), filter).await {
+        Ok(customer) => customer,
+        Err((status, json)) => return (status, json)
+    };
+
+    if !found {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(GenericResponse {
+                message: String::from("customer not found"),
+                data: json!({}),
+                exited_code: 1,
+            }),
+        );
+    };
+
+    let customer = customer.unwrap();
     let mut emails = customer.emails;
     if emails.len() >= 5 {
         return (
@@ -545,29 +433,17 @@ pub async fn add_email(
         })
         .collect::<Vec<_>>();
 
-    let filter = doc! {"id": &customer_id};
-    let collection: Collection<Account> = state.mongo_db.collection("accounts");
+    let filter = build_customer_filter(customer_id.as_str(), "").await;
     let update = doc! {"$set": {"emails": &bson_emails}};
-    match collection.update_one(filter, update, None).await {
-        Ok(_) => (),
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(GenericResponse {
-                    message: String::from("error updating record in database"),
-                    data: json!({}),
-                    exited_code: 1,
-                }),
-            )
-        }
+    match update_customer(state.mongo_db.clone(), filter, update).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(GenericResponse {
+                message: String::from("customer email updated successfully"),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        ),
+        Err((status, json)) => return (status, json)
     }
-
-    (
-        StatusCode::OK,
-        Json(GenericResponse {
-            message: String::from("email address added successfully"),
-            data: json!({}),
-            exited_code: 0,
-        }),
-    )
 }

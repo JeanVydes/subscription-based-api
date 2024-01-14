@@ -1,2 +1,2 @@
 pub mod identity;
-pub mod account;
+pub mod customer;

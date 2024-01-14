@@ -1,4 +1,3 @@
-mod helpers;
 mod server;
 mod token;
 
@@ -6,6 +5,7 @@ mod controllers;
 mod lemonsqueezy;
 mod storage;
 mod types;
+mod utilities;
 
 use std::env;
 use storage::{mongo, redis};

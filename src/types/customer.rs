@@ -18,31 +18,30 @@ pub struct Email {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum AccountType {
+pub enum CustomerType {
     PERSONAL,
     MANAGER,
     DEVELOPER,
 }
 
-impl FromStr for AccountType {
+impl FromStr for CustomerType {
     type Err = ();
 
-    fn from_str(s: &str) -> Result<AccountType, Self::Err> {
+    fn from_str(s: &str) -> Result<CustomerType, Self::Err> {
         match s {
-            "personal" => Ok(AccountType::PERSONAL),
-            "manager" => Ok(AccountType::MANAGER),
-            "developer" => Ok(AccountType::DEVELOPER),
-            _ => Ok(AccountType::PERSONAL),
+            "personal" => Ok(CustomerType::PERSONAL),
+            "manager" => Ok(CustomerType::MANAGER),
+            "developer" => Ok(CustomerType::DEVELOPER),
+            _ => Ok(CustomerType::PERSONAL),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Account {
-    // identificators
+pub struct Customer {
     pub id: String,
     pub name: String,
-    pub class: AccountType,
+    pub class: CustomerType,
     pub emails: Vec<Email>,
 
     // security

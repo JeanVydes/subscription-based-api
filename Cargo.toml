@@ -15,7 +15,7 @@ regex = "1.10.2"
 tower = "0.4.13"
 axum-extra = "0.9.1"
 bcrypt = "0.15.0"
-redis = "0.24.0"
+redis =  { version = "0.24.0", features = ["tls-native-tls"]}
 tower-http = { version = "0.4.3", features = ["full"] }
 rand = "0.8.5"
 chrono = "0.4.31"

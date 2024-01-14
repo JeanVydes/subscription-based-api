@@ -1,11 +1,11 @@
 use crate::{
-    helpers::payload_analyzer,
+    utilities::helpers::payload_analyzer,
     lemonsqueezy::subscription::{
         subscription_created, subscription_update_history_logs, subscription_update_status,
         subscription_updated,
     },
     server::AppState,
-    types::account::GenericResponse,
+    types::customer::GenericResponse,
     types::lemonsqueezy::{OrderEvent, SubscriptionEvent},
 };
 

@@ -1,20 +1,17 @@
 use std::sync::Arc;
 
 use axum::Json;
-use mongodb::{
-    bson::{self, doc, to_bson, Bson, Document},
-    Collection,
-};
+use mongodb::bson::{doc, to_bson, Bson};
 use serde_json::json;
 
 use crate::{
-    helpers::random_string,
+    utilities::helpers::{random_string, add_subscription_history_log_and_to_bson},
     server::AppState,
     types::{
-        account::{Account, GenericResponse},
+        customer::GenericResponse,
         lemonsqueezy::SubscriptionEvent,
         subscription::{Slug, Subscription, SubscriptionFrequencyClass, SubscriptionHistoryLog},
-    },
+    }, storage::mongo::{build_customer_filter, find_customer, update_customer},
 };
 
 pub async fn subscription_created(
@@ -22,37 +19,25 @@ pub async fn subscription_created(
     state: Arc<AppState>,
 ) -> Result<(), Json<GenericResponse>> {
     let customer_id = event.meta.custom_data.unwrap().customer_id;
-    let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let customer_filter = doc! {"$or": [
-        {"id": &customer_id},
-        {
-            "emails": {
-                "$elemMatch": {
-                    "address": event.data.attributes.user_email,
-                }
-            }
-        }
-    ]};
-
-    let customer = match collection.find_one(customer_filter.clone(), None).await {
-        Ok(account) => match account {
-            Some(acc) => acc,
-            None => {
-                return Err(Json(GenericResponse {
-                    message: String::from("invalid customer_id: not records"),
-                    data: json!({}),
-                    exited_code: 1,
-                }))
-            }
-        },
+    let filter = build_customer_filter(customer_id.as_str(), event.data.attributes.user_email.as_str()).await;
+    let (found, customer) = match find_customer(state.mongo_db.clone(), filter.clone()).await {
+        Ok(customer) => customer,
         Err(_) => {
             return Err(Json(GenericResponse {
                 message: String::from("error checking customer existence"),
                 data: json!({}),
                 exited_code: 1,
-            }))
+            }));
         }
     };
+
+    if !found {
+        return Err(Json(GenericResponse {
+            message: String::from("invalid customer_id: not records"),
+            data: json!({}),
+            exited_code: 1,
+        }));
+    }
 
     let frequency: SubscriptionFrequencyClass;
     if event.data.attributes.variant_id == state.products.pro_monthly_variant_id {
@@ -66,6 +51,8 @@ pub async fn subscription_created(
             exited_code: 1,
         }));
     }
+
+    let customer = customer.unwrap();
 
     let subscription_id = random_string(15).await;
     let mut history_logs = customer.subscription.history_logs.clone();
@@ -117,8 +104,8 @@ pub async fn subscription_created(
         },
     };
 
-    match collection.update_one(customer_filter, update, None).await {
-        Ok(_) => {}
+    match update_customer(state.mongo_db.clone(), filter, update).await {
+        Ok(_) => Ok(()),
         Err(_) => {
             return Err(Json(GenericResponse {
                 message: String::from("error updating customer subscription"),
@@ -127,8 +114,6 @@ pub async fn subscription_created(
             }))
         }
     }
-
-    Ok(())
 }
 
 pub async fn subscription_updated(
@@ -136,54 +121,32 @@ pub async fn subscription_updated(
     state: Arc<AppState>,
 ) -> Result<(), Json<GenericResponse>> {
     let customer_id = event.meta.custom_data.unwrap().customer_id;
-    let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let customer_filter = doc! {"$or": [
-        {"id": &customer_id},
-        {
-            "emails": {
-                "$elemMatch": {
-                    "address": event.data.attributes.user_email,
-                }
-            }
-        }
-    ]};
+    let filter = build_customer_filter(customer_id.as_str(), event.data.attributes.user_email.as_str()).await;
 
-    let customer = match collection.find_one(customer_filter.clone(), None).await {
-        Ok(account) => match account {
-            Some(acc) => acc,
-            None => {
-                return Err(Json(GenericResponse {
-                    message: String::from("invalid customer_id: not records"),
-                    data: json!({}),
-                    exited_code: 1,
-                }))
-            }
-        },
+    let (found, customer) = match find_customer(state.mongo_db.clone(), filter.clone()).await {
+        Ok(customer) => customer,
         Err(_) => {
             return Err(Json(GenericResponse {
                 message: String::from("error checking customer existence"),
                 data: json!({}),
                 exited_code: 1,
-            }))
+            }));
         }
     };
 
-    let mut history_logs = customer.subscription.history_logs.clone();
-    history_logs.push(SubscriptionHistoryLog {
+    if !found {
+        return Err(Json(GenericResponse {
+            message: String::from("invalid customer_id: not records"),
+            data: json!({}),
+            exited_code: 1,
+        }));
+    }
+
+    let customer = customer.unwrap();
+    let bson_history_logs = add_subscription_history_log_and_to_bson(customer.subscription.history_logs, SubscriptionHistoryLog {
         event: event.meta.event_name,
         date: event.data.attributes.updated_at.clone(),
-    });
-
-    let bson_history_logs: Vec<Document> = history_logs.iter()
-    .map(|log| {
-        match bson::to_document(log) {
-            Ok(document) => document,
-            Err(_) => {
-                return Document::new();
-            }
-        }
-    })
-    .collect();
+    }).await;
 
     let update = doc! {
         "$set": doc!{
@@ -194,8 +157,8 @@ pub async fn subscription_updated(
         },
     };
 
-    match collection.update_one(customer_filter, update, None).await {
-        Ok(_) => {}
+    match update_customer(state.mongo_db.clone(), filter, update).await {
+        Ok(_) => Ok(()),
         Err(_) => {
             return Err(Json(GenericResponse {
                 message: String::from("error updating customer subscription"),
@@ -204,8 +167,6 @@ pub async fn subscription_updated(
             }))
         }
     }
-
-    Ok(())
 }
 
 // ready
@@ -214,54 +175,32 @@ pub async fn subscription_update_status(
     state: Arc<AppState>,
 ) -> Result<(), Json<GenericResponse>> {
     let customer_id = event.meta.custom_data.unwrap().customer_id;
-    let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let customer_filter = doc! {"$or": [
-        {"id": &customer_id},
-        {
-            "emails": {
-                "$elemMatch": {
-                    "address": event.data.attributes.user_email,
-                }
-            }
-        }
-    ]};
+    let filter = build_customer_filter(customer_id.as_str(), event.data.attributes.user_email.as_str()).await;
 
-    let customer = match collection.find_one(customer_filter.clone(), None).await {
-        Ok(account) => match account {
-            Some(acc) => acc,
-            None => {
-                return Err(Json(GenericResponse {
-                    message: String::from("invalid customer_id: not records"),
-                    data: json!({}),
-                    exited_code: 1,
-                }))
-            }
-        },
+    let (found, customer) = match find_customer(state.mongo_db.clone(), filter.clone()).await {
+        Ok(customer) => customer,
         Err(_) => {
             return Err(Json(GenericResponse {
                 message: String::from("error checking customer existence"),
                 data: json!({}),
                 exited_code: 1,
-            }))
+            }));
         }
     };
 
-    let mut history_logs = customer.subscription.history_logs.clone();
-    history_logs.push(SubscriptionHistoryLog {
+    if !found {
+        return Err(Json(GenericResponse {
+            message: String::from("invalid customer_id: not records"),
+            data: json!({}),
+            exited_code: 1,
+        }));
+    }
+
+    let customer = customer.unwrap();
+    let bson_history_logs = add_subscription_history_log_and_to_bson(customer.subscription.history_logs, SubscriptionHistoryLog {
         event: event.meta.event_name,
         date: event.data.attributes.updated_at.clone(),
-    });
-
-    let bson_history_logs: Vec<Document> = history_logs.iter()
-    .map(|log| {
-        match bson::to_document(log) {
-            Ok(document) => document,
-            Err(_) => {
-                return Document::new();
-            }
-        }
-    })
-    .collect();
+    }).await;
 
     let update = doc! {
         "$set": doc!{
@@ -271,8 +210,8 @@ pub async fn subscription_update_status(
         },
     };
 
-    match collection.update_one(customer_filter, update, None).await {
-        Ok(_) => {}
+    match update_customer(state.mongo_db.clone(), filter, update).await {
+        Ok(_) => Ok(()),
         Err(_) => {
             return Err(Json(GenericResponse {
                 message: String::from("error updating customer subscription"),
@@ -281,8 +220,6 @@ pub async fn subscription_update_status(
             }))
         }
     }
-
-    Ok(())
 }
 
 pub async fn subscription_update_history_logs(
@@ -290,52 +227,31 @@ pub async fn subscription_update_history_logs(
     state: Arc<AppState>,
 ) -> Result<(), Json<GenericResponse>> {
     let customer_id = event.meta.custom_data.unwrap().customer_id;
-    let collection: Collection<Account> = state.mongo_db.collection("accounts");
-    let customer_filter = doc! {"$or": [
-        {"id": &customer_id},
-        {
-            "emails": {
-                "$elemMatch": {
-                    "address": event.data.attributes.user_email,
-                }
-            }
-        }
-    ]};
-
-    let customer = match collection.find_one(customer_filter.clone(), None).await {
-        Ok(account) => match account {
-            Some(acc) => acc,
-            None => {
-                return Err(Json(GenericResponse {
-                    message: String::from("invalid customer_id: not records"),
-                    data: json!({}),
-                    exited_code: 1,
-                }))
-            }
-        },
+    let filter = build_customer_filter(customer_id.as_str(), event.data.attributes.user_email.as_str()).await;
+    let (found, customer) = match find_customer(state.mongo_db.clone(), filter.clone()).await {
+        Ok(customer) => customer,
         Err(_) => {
             return Err(Json(GenericResponse {
                 message: String::from("error checking customer existence"),
                 data: json!({}),
                 exited_code: 1,
-            }))
+            }));
         }
     };
 
-    let mut history_logs = customer.subscription.history_logs.clone();
-    history_logs.push(SubscriptionHistoryLog {
+    if !found {
+        return Err(Json(GenericResponse {
+            message: String::from("invalid customer_id: not records"),
+            data: json!({}),
+            exited_code: 1,
+        }));
+    }
+
+    let customer = customer.unwrap();
+    let bson_history_logs = add_subscription_history_log_and_to_bson(customer.subscription.history_logs, SubscriptionHistoryLog {
         event: event.meta.event_name,
         date: event.data.attributes.updated_at.clone(),
-    });
-
-    let bson_history_logs: Vec<Document> = history_logs.iter()
-    .map(|log| {
-        match bson::to_document(log) {
-            Ok(document) => document,
-            Err(_) => return Document::new(),
-        }
-    })
-    .collect();
+    }).await;
 
     let update = doc!  {
         "$set": doc!{
@@ -344,8 +260,8 @@ pub async fn subscription_update_history_logs(
         },
     };
 
-    match collection.update_one(customer_filter, update, None).await {
-        Ok(_) => {}
+    match update_customer(state.mongo_db.clone(), filter, update).await {
+        Ok(_) => Ok(()),
         Err(_) => {
             return Err(Json(GenericResponse {
                 message: String::from("error updating customer subscription"),
@@ -354,6 +270,4 @@ pub async fn subscription_update_history_logs(
             }))
         }
     }
-
-    Ok(())
 }

@@ -7,7 +7,7 @@ pub struct SignIn {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateAccount {
+pub struct CreateCustomerRecord {
     pub name: String,
     pub email: String,
     pub password: String,
@@ -17,18 +17,18 @@ pub struct CreateAccount {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccountUpdateName {
+pub struct CustomerUpdateName {
     pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccountUpdatePassword {
+pub struct CustomerUpdatePassword {
     pub old_password: String,
     pub new_password: String,
     pub new_password_confirmation: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccountAddEmail {
+pub struct CustomerAddEmail {
     pub email: String,
 }
