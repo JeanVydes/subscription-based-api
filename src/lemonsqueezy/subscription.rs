@@ -71,7 +71,6 @@ pub async fn subscription_created(
         None => "".to_string(),
     };
     
-    println!("updating subscription");
     let update_subscription = Subscription {
         id: subscription_id,
         product_id: event.data.attributes.product_id,

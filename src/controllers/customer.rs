@@ -9,11 +9,10 @@ use axum::http::HeaderMap;
 use axum::{extract::rejection::JsonRejection, http::StatusCode, Json};
 use chrono::Utc;
 use mongodb::bson::doc;
-use regex::Regex;
 use serde_json::json;
 use std::sync::Arc;
 
-use bcrypt::{hash, DEFAULT_COST};
+use bcrypt::{hash, DEFAULT_COST, verify};
 
 use super::identity::get_user_id_from_req;
 
@@ -290,17 +289,10 @@ pub async fn update_password(
         );
     }
 
-    let password_re = Regex::new(r"^[a-zA-Z0-9_]{8,20}$").unwrap();
-    if !password_re.is_match(&payload.new_password) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(GenericResponse {
-                message: String::from("invalid new password"),
-                data: json!({}),
-                exited_code: 1,
-            }),
-        );
-    }
+    match valid_password(&payload.new_password).await {
+        Ok(_) => (),
+        Err((status_code, json)) => return (status_code, json),
+    };
 
     if payload.new_password == payload.old_password {
         return (
@@ -338,31 +330,31 @@ pub async fn update_password(
         }
     };
 
-    let hashed_old_password = match hash(&payload.old_password, DEFAULT_COST) {
-        Ok(hashed_password) => hashed_password,
+    let customer = customer.unwrap();
+    match verify(&payload.old_password, &customer.password) {
+        Ok(is_valid) => {
+            if !is_valid {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(GenericResponse {
+                        message: String::from("unauthorized: incorrect current password"),
+                        data: json!({}),
+                        exited_code: 0,
+                    }),
+                );
+            }
+        },
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: String::from("error hashing password"),
+                    message: String::from("error verifying password"),
                     data: json!({}),
-                    exited_code: 1,
+                    exited_code: 0,
                 }),
             )
         }
     };
-
-    let customer = customer.unwrap();
-    if customer.password != hashed_old_password {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(GenericResponse {
-                message: String::from("invalid old password"),
-                data: json!({}),
-                exited_code: 1,
-            }),
-        );
-    }
 
     let current_datetime = Utc::now();
     let iso8601_string = current_datetime.to_rfc3339();
@@ -432,8 +424,14 @@ pub async fn add_email(
         );
     }
 
+    let email = payload.email.to_lowercase();
+    match valid_email(&email).await {
+        Ok(_) => (),
+        Err((status_code, json)) => return (status_code, json),
+    };
+
     emails.push(Email {
-        address: payload.email.to_lowercase(),
+        address: email,
         verified: false,
         main: false,
     });
@@ -458,7 +456,7 @@ pub async fn add_email(
             "updated_at": iso8601_string,
         }
     };
-    
+
     match update_customer(state.mongo_db.clone(), filter, update).await {
         Ok(_) => (
             StatusCode::OK,

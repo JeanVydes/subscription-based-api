@@ -48,7 +48,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
                 let app_state = Arc::clone(&app_state);
                 move |(headers, payload): (HeaderMap, Result<Json<CustomerUpdateName>, JsonRejection>)| {
                     update_name(headers, payload, app_state)
-                };
+                }
             }),
         )
         .route(
@@ -57,7 +57,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
                 let app_state = Arc::clone(&app_state);
                 move |(headers, payload): (HeaderMap, Result<Json<CustomerUpdatePassword>, JsonRejection>)| {
                     update_password(headers, payload, app_state)
-                };
+                }
             }),
         )
         .route(
@@ -66,9 +66,9 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
                 let app_state = Arc::clone(&app_state);
                 move |(headers, payload): (HeaderMap, Result<Json<CustomerAddEmail>, JsonRejection>)| {
                     add_email(headers, payload, app_state)
-                };
+                }
             }),
-        ); // multiple emails only for managers
+        );
 
     // /api/identity
     let identity = Router::new()

@@ -89,7 +89,7 @@ pub async fn valid_password(password: &String) -> Result<bool, (StatusCode, Json
         ));
     }
 
-    let re = Regex::new(r"^[a-zA-Z0-9_]{8,20}$").unwrap();;
+    let re = Regex::new(r"^[a-zA-Z0-9_]{8,20}$").unwrap();
     if !re.is_match(password.as_str()) {
         return Err((
             StatusCode::BAD_REQUEST,
