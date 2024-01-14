@@ -213,8 +213,16 @@ pub async fn update_name(
         );
     }
 
+    let current_datetime = Utc::now();
+    let iso8601_string = current_datetime.to_rfc3339();
+
     let filter = build_customer_filter(customer_id.as_str(), "").await;
-    let update = doc! {"$set": {"name": &payload.name}};
+    let update = doc! {"$set": {
+            "name": &payload.name,
+            "updated_at": iso8601_string,
+        }
+    };
+
     match update_customer(state.mongo_db.clone(), filter, update).await {
         Ok(_) => (
             StatusCode::OK,
@@ -356,8 +364,16 @@ pub async fn update_password(
         );
     }
 
+    let current_datetime = Utc::now();
+    let iso8601_string = current_datetime.to_rfc3339();
+
     let filter = build_customer_filter(customer_id.as_str(), "").await;
-    let update = doc! {"$set": {"password": hashed_new_password}};
+    let update = doc! {"$set": {
+            "password": hashed_new_password,
+            "updated_at": iso8601_string,
+        }
+    };
+
     match update_customer(state.mongo_db.clone(), filter, update).await {
         Ok(_) => (
             StatusCode::OK,
@@ -433,8 +449,16 @@ pub async fn add_email(
         })
         .collect::<Vec<_>>();
 
+    let current_datetime = Utc::now();
+    let iso8601_string = current_datetime.to_rfc3339();
+
     let filter = build_customer_filter(customer_id.as_str(), "").await;
-    let update = doc! {"$set": {"emails": &bson_emails}};
+    let update = doc! {"$set": {
+            "emails": &bson_emails,
+            "updated_at": iso8601_string,
+        }
+    };
+    
     match update_customer(state.mongo_db.clone(), filter, update).await {
         Ok(_) => (
             StatusCode::OK,

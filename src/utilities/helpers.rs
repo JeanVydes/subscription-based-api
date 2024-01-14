@@ -62,7 +62,7 @@ pub async fn valid_email(email: &String) -> Result<bool, (StatusCode, Json<Gener
         ));
     }
 
-    let re = Regex::new(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$").unwrap();
+    let re = Regex::new(r"^([a-z0-9_+]([a-z0-9_+.]*[a-z0-9_+])?)@([a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,6})").unwrap();
     if !re.is_match(email.as_str()) {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -89,7 +89,7 @@ pub async fn valid_password(password: &String) -> Result<bool, (StatusCode, Json
         ));
     }
 
-    let re = Regex::new(r"^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$").unwrap();
+    let re = Regex::new(r"^[a-zA-Z0-9_]{8,20}$").unwrap();;
     if !re.is_match(password.as_str()) {
         return Err((
             StatusCode::BAD_REQUEST,
