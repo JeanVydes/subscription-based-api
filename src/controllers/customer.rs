@@ -430,6 +430,47 @@ pub async fn add_email(
         Err((status_code, json)) => return (status_code, json),
     };
 
+    for registered_email in emails.iter() {
+        if registered_email.address == email {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(GenericResponse {
+                    message: String::from("email already registered"),
+                    data: json!({}),
+                    exited_code: 1,
+                }),
+            );
+        }
+    }
+
+    let filter = build_customer_filter("", email.as_str()).await;
+    let (found, customer_with_current_email) = match find_customer(state.mongo_db.clone(), filter).await {
+        Ok(customer) => customer,
+        Err((status, json)) => return (status, json)
+    };
+
+    if found {
+        if customer_with_current_email.unwrap().id != customer.id {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(GenericResponse {
+                    message: String::from("email already registered by other customer"),
+                    data: json!({}),
+                    exited_code: 1,
+                }),
+            );
+        }
+
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(GenericResponse {
+                message: String::from("email already registered by you"),
+                data: json!({}),
+                exited_code: 1,
+            }),
+        );
+    }
+
     emails.push(Email {
         address: email,
         verified: false,

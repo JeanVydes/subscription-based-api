@@ -1,19 +1,22 @@
 use crate::{
-    controllers::customer::create_customer_record,
-    controllers::{identity::{get_session, request_credentials}, customer::{update_name, update_password, add_email}},
     utilities::helpers::fallback,
-    lemonsqueezy::webhook::{orders_webhook_events_listener, subscription_webhook_events_listener},
-    types::{lemonsqueezy::{OrderEvent, SubscriptionEvent, Products}, incoming_requests::{CustomerUpdateName, CustomerUpdatePassword, CustomerAddEmail}},
+    types::lemonsqueezy::Products, 
+    routers::{
+        identity::get_identity_router, 
+        customer_actions::get_customer_actions_router, 
+        customers::get_customers_router, 
+        webhooks::get_webhooks_router
+    },
 };
 use axum::{
-    extract::rejection::JsonRejection,
-    http::{HeaderMap, Method},
-    routing::{get, post, patch},
-    Json, Router,
+    http::Method,
+    routing::get,
+    Router,
 };
 use mongodb::{Client as MongoClient, Database};
 use redis::Client as RedisClient;
 use std::{env, sync::Arc};
+
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
@@ -32,85 +35,13 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
     let app_state = set_app_state(mongodb_client, redis_client).await;
 
     // /api/customers
-    let customers = Router::new()
-        .route(
-            "/create",
-            post({
-                let app_state = Arc::clone(&app_state);
-                move |payload| create_customer_record(payload, app_state)
-            }),
-        );
-
-    let customers_actions = Router::new()
-        .route(
-            "/update/name",
-            patch({
-                let app_state = Arc::clone(&app_state);
-                move |(headers, payload): (HeaderMap, Result<Json<CustomerUpdateName>, JsonRejection>)| {
-                    update_name(headers, payload, app_state)
-                }
-            }),
-        )
-        .route(
-            "/update/password",
-            patch({
-                let app_state = Arc::clone(&app_state);
-                move |(headers, payload): (HeaderMap, Result<Json<CustomerUpdatePassword>, JsonRejection>)| {
-                    update_password(headers, payload, app_state)
-                }
-            }),
-        )
-        .route(
-            "/add/email",
-            patch({
-                let app_state = Arc::clone(&app_state);
-                move |(headers, payload): (HeaderMap, Result<Json<CustomerAddEmail>, JsonRejection>)| {
-                    add_email(headers, payload, app_state)
-                }
-            }),
-        );
-
+    let customers = get_customers_router(app_state.clone()).await;
+    // /api/me
+    let customers_actions = get_customer_actions_router(app_state.clone()).await;
     // /api/identity
-    let identity = Router::new()
-        .route(
-            "/session",
-            post({
-                let app_state = Arc::clone(&app_state);
-                move |payload| request_credentials(payload, app_state)
-            }),
-        )
-        .route(
-            "/session",
-            get({
-                let app_state = Arc::clone(&app_state);
-                move |headers| get_session(headers, app_state)
-            }),
-        );
-
+    let identity = get_identity_router(app_state.clone()).await;
     // /api/webhooks
-    let webhooks = Router::new()
-        .route(
-            "/lemonsqueezy/events/orders",
-            post({
-                let app_state = Arc::clone(&app_state);
-                move |(headers, payload): (HeaderMap, Result<Json<OrderEvent>, JsonRejection>)| {
-                    orders_webhook_events_listener(headers, payload, app_state)
-                }
-            }),
-        )
-        .route(
-            "/lemonsqueezy/events/subscriptions",
-            post({
-                let app_state = Arc::clone(&app_state);
-                move |(headers, payload): (
-                    HeaderMap,
-                    Result<Json<SubscriptionEvent>, JsonRejection>,
-                )| {
-                    subscription_webhook_events_listener(headers, payload, app_state)
-                }
-            }),
-        );
-
+    let webhooks = get_webhooks_router(app_state.clone()).await;
     // /api
     let api = Router::new()
         .nest("/customers", customers)
@@ -120,7 +51,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
 
     let cors = CorsLayer::new()
         .allow_credentials(false)
-        .allow_methods([Method::GET, Method::POST, Method::DELETE])
+        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::PATCH])
         .allow_origin(Any);
 
     let app = Router::new()

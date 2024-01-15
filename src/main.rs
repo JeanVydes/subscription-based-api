@@ -6,6 +6,7 @@ mod lemonsqueezy;
 mod storage;
 mod types;
 mod utilities;
+mod routers;
 
 use std::env;
 use storage::{mongo, redis};
