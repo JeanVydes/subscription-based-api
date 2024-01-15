@@ -1,5 +1,5 @@
 # API integrate with LemonSqueezy Template
-´´´{{{{{{{{{{{{{{}}}}}}}}}}}}}}
+
 Check the [Postman API Reference](https://www.postman.com/jeanservices/workspace/8i/collection/11966073-e41fc689-a391-45b6-8d1e-d2b6176b5615?action=share&creator=11966073) to learn how to use
 
 # Run
