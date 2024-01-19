@@ -1,7 +1,7 @@
 use crate::utilities::helpers::payload_analyzer;
 use crate::server::AppState;
 use crate::storage::mongo::{build_customer_filter, find_customer};
-use crate::token::{create_token, validate_token};
+use crate::utilities::token::{create_token, validate_token};
 use crate::types::customer::GenericResponse;
 use crate::types::incoming_requests::SignIn;
 

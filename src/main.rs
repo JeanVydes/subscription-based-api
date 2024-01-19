@@ -1,5 +1,4 @@
 mod server;
-mod token;
 
 mod controllers;
 mod lemonsqueezy;
