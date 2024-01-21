@@ -19,8 +19,9 @@ also i create a postman api reference, you have to replicate that in your fronte
 # Run
 
 * Fly.io as Hosting Provider (optional)
-* MongoDB Instance (mongodb.com)
-* RedisDB Instance (upstash.io)
+* PostgresSQL Instance (optional [SupaBase](https://supabase.com/))
+* MongoDB Instance ([MongoDB](https://mongodb.com/))
+* RedisDB Instance ([upstash.io](https://upstash.io/))
 * Set enviroment vars
 * `fly launch`
 
