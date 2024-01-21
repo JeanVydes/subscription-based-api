@@ -13,7 +13,9 @@ use axum::{
     routing::get,
     Router,
 };
+use diesel::{r2d2::ConnectionManager, PgConnection};
 use mongodb::{Client as MongoClient, Database};
+use r2d2::Pool;
 use redis::Client as RedisClient;
 use std::{env, sync::Arc};
 
@@ -22,32 +24,44 @@ use tower_http::{
     cors::{Any, CorsLayer},
 };
 
+use log::info;
+
 #[derive(Clone)]
 pub struct AppState {
     pub mongodb_client: MongoClient,
     pub redis_connection: RedisClient,
+    pub postgres_conn: Option<Pool<ConnectionManager<PgConnection>>>,
     pub mongo_db: Database,
     pub lemonsqueezy_webhook_signature_key: String,
     pub products: Products,
 }
 
-pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
-    let app_state = set_app_state(mongodb_client, redis_client).await;
+pub async fn init(mongodb_client: MongoClient, redis_connection: RedisClient, postgres_conn: Option<Pool<ConnectionManager<PgConnection>>>) {
+    let app_state = set_app_state(mongodb_client, redis_connection, postgres_conn).await;
+
+    // show products, for testing purposes
+    info!("Products: {:?}", app_state.products);
 
     // /api/customers
     let customers = get_customers_router(app_state.clone()).await;
+    info!("Customers router loaded");
     // /api/me
     let customers_actions = get_customer_actions_router(app_state.clone()).await;
+    info!("Customers actions router loaded");
     // /api/identity
     let identity = get_identity_router(app_state.clone()).await;
+    info!("Identity router loaded");
     // /api/webhooks
     let webhooks = get_webhooks_router(app_state.clone()).await;
+    info!("Webhooks router loaded");
     // /api
     let api = Router::new()
         .nest("/customers", customers)
         .nest("/me", customers_actions)
         .nest("/identity", identity)
         .nest("/webhooks", webhooks);
+
+    info!("API router loaded");
 
     let cors = CorsLayer::new()
         .allow_credentials(false)
@@ -66,6 +80,8 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
     let port = env::var("PORT").unwrap_or_else(|_| String::from("8080"));
     let address = format!("{}:{}", host, port);
 
+    info!("Starting server on {}", address);
+
     match axum::Server::bind(&address.parse().unwrap())
         .serve(app.into_make_service())
         .await
@@ -75,7 +91,7 @@ pub async fn init(mongodb_client: MongoClient, redis_client: RedisClient) {
     };
 }
 
-pub async fn set_app_state(mongodb_client: MongoClient, redis_client: RedisClient) -> Arc<AppState> {
+pub async fn set_app_state(mongodb_client: MongoClient, redis_connection: RedisClient, postgres_conn: Option<Pool<ConnectionManager<PgConnection>>>) -> Arc<AppState> {
     let mongo_db = match env::var("MONGO_DB_NAME") {
         Ok(db) => db,
         Err(_) => panic!("mongo_db_name not found"),
@@ -109,8 +125,9 @@ pub async fn set_app_state(mongodb_client: MongoClient, redis_client: RedisClien
     };
 
     let app_state = Arc::new(AppState {
-        mongodb_client: mongodb_client.clone(),
-        redis_connection: redis_client.clone(),
+        mongodb_client,
+        redis_connection,
+        postgres_conn,
         mongo_db,
         lemonsqueezy_webhook_signature_key,
         products,

@@ -20,7 +20,7 @@ pub async fn subscription_created(
 ) -> Result<(), Json<GenericResponse>> {
     let customer_id = event.meta.custom_data.unwrap().customer_id;
     let filter = build_customer_filter(customer_id.as_str(), event.data.attributes.user_email.as_str()).await;
-    let (found, customer) = match find_customer(state.mongo_db.clone(), filter.clone()).await {
+    let (found, customer) = match find_customer(&state.mongo_db, filter.clone()).await {
         Ok(customer) => customer,
         Err(_) => {
             return Err(Json(GenericResponse {
@@ -103,7 +103,7 @@ pub async fn subscription_created(
         },
     };
 
-    match update_customer(state.mongo_db.clone(), filter, update).await {
+    match update_customer(&state.mongo_db, filter, update).await {
         Ok(_) => Ok(()),
         Err(_) => {
             return Err(Json(GenericResponse {
@@ -122,7 +122,7 @@ pub async fn subscription_updated(
     let customer_id = event.meta.custom_data.unwrap().customer_id;
     let filter = build_customer_filter(customer_id.as_str(), event.data.attributes.user_email.as_str()).await;
 
-    let (found, customer) = match find_customer(state.mongo_db.clone(), filter.clone()).await {
+    let (found, customer) = match find_customer(&state.mongo_db, filter.clone()).await {
         Ok(customer) => customer,
         Err(_) => {
             return Err(Json(GenericResponse {
@@ -156,7 +156,7 @@ pub async fn subscription_updated(
         },
     };
 
-    match update_customer(state.mongo_db.clone(), filter, update).await {
+    match update_customer(&state.mongo_db, filter, update).await {
         Ok(_) => Ok(()),
         Err(_) => {
             return Err(Json(GenericResponse {
@@ -176,7 +176,7 @@ pub async fn subscription_update_status(
     let customer_id = event.meta.custom_data.unwrap().customer_id;
     let filter = build_customer_filter(customer_id.as_str(), event.data.attributes.user_email.as_str()).await;
 
-    let (found, customer) = match find_customer(state.mongo_db.clone(), filter.clone()).await {
+    let (found, customer) = match find_customer(&state.mongo_db, filter.clone()).await {
         Ok(customer) => customer,
         Err(_) => {
             return Err(Json(GenericResponse {
@@ -209,7 +209,7 @@ pub async fn subscription_update_status(
         },
     };
 
-    match update_customer(state.mongo_db.clone(), filter, update).await {
+    match update_customer(&state.mongo_db, filter, update).await {
         Ok(_) => Ok(()),
         Err(_) => {
             return Err(Json(GenericResponse {
@@ -227,7 +227,7 @@ pub async fn subscription_update_history_logs(
 ) -> Result<(), Json<GenericResponse>> {
     let customer_id = event.meta.custom_data.unwrap().customer_id;
     let filter = build_customer_filter(customer_id.as_str(), event.data.attributes.user_email.as_str()).await;
-    let (found, customer) = match find_customer(state.mongo_db.clone(), filter.clone()).await {
+    let (found, customer) = match find_customer(&state.mongo_db, filter.clone()).await {
         Ok(customer) => customer,
         Err(_) => {
             return Err(Json(GenericResponse {
@@ -259,7 +259,7 @@ pub async fn subscription_update_history_logs(
         },
     };
 
-    match update_customer(state.mongo_db.clone(), filter, update).await {
+    match update_customer(&state.mongo_db, filter, update).await {
         Ok(_) => Ok(()),
         Err(_) => {
             return Err(Json(GenericResponse {

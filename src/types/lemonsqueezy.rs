@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Products {
     pub pro_product_id: i64,
     pub pro_monthly_variant_id: i64,

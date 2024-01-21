@@ -16,6 +16,7 @@ Check the [Postman API Reference](https://www.postman.com/jeanservices/workspace
 HOST=0.0.0.0
 PORT=8080
 
+POSTGRES_URI=                       # (optional) fly secrets set POSTGRES_URI=
 MONGO_URI=                          # fly secrets set MONGO_URI=
 REDIS_URI=                          # fly secrets set REDIS_URI=
 MONGO_DB_NAME=

@@ -18,6 +18,7 @@ use sha2::Sha256;
 
 use serde_json::json;
 use std::sync::Arc;
+use log::trace;
 
 // built with the help of https://www.linkedin.com/pulse/verifying-custom-headers-hmac-signature-rust-axum-abdurachman--r8ltc
 pub async fn signature_verification<T>(
@@ -162,7 +163,7 @@ pub async fn subscription_webhook_events_listener(
     //let (verified, error_response) = signature_verification(headers, payload.clone(), state.clone()).await;
 
     //if !verified {
-      //  println!("Signature Isn't Valid");
+      //  trace!("Signature Isn't Valid");
       //  return (StatusCode::BAD_REQUEST, error_response);
     //}
 
@@ -180,7 +181,7 @@ pub async fn subscription_webhook_events_listener(
         }
     };
 
-    println!("CUSTOM DATA: {:?}", custom_data);
+    trace!("CUSTOM DATA: {:?}", custom_data);
 
     let customer_id = custom_data.customer_id.clone();
     if customer_id.len() > 100 || customer_id.len() < 1 {
@@ -194,9 +195,9 @@ pub async fn subscription_webhook_events_listener(
         );
     }
 
-    println!("EVENT NAME: {:?}", payload.meta.event_name);
-    println!("CUSTOMER ID: {:?}", customer_id);
-    println!("CUSTOMER EMAIL: {:?}", payload.data.attributes.user_email);
+    trace!("EVENT NAME: {:?}", payload.meta.event_name);
+    trace!("CUSTOMER ID: {:?}", customer_id);
+    trace!("CUSTOMER EMAIL: {:?}", payload.data.attributes.user_email);
 
     let event_name = payload.meta.event_name.clone();
     match event_name.as_str() {

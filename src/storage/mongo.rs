@@ -44,11 +44,11 @@ pub async fn build_customer_filter(id: &str, email: &str) -> Document {
     return customer_filter
 }
 
-pub async fn get_customers_collection(db: Database) -> Collection<Customer> {
+pub async fn get_customers_collection(db: &Database) -> Collection<Customer> {
     return db.collection("customers");
 }
 
-pub async fn find_customer(db: Database, filter: Document) -> Result<(bool, Option<Customer>), (StatusCode, Json<GenericResponse>)> {
+pub async fn find_customer(db: &Database, filter: Document) -> Result<(bool, Option<Customer>), (StatusCode, Json<GenericResponse>)> {
     let collection = get_customers_collection(db).await;
     match collection.find_one(filter, None).await {
         Ok(customer) => match customer {
@@ -68,7 +68,7 @@ pub async fn find_customer(db: Database, filter: Document) -> Result<(bool, Opti
     }
 }
 
-pub async fn update_customer(db: Database, filter: Document, update: Document) -> Result<(), (StatusCode, Json<GenericResponse>)> {
+pub async fn update_customer(db: &Database, filter: Document, update: Document) -> Result<(), (StatusCode, Json<GenericResponse>)> {
     let collection = get_customers_collection(db).await;
     match collection.update_one(filter, update, None).await {
         Ok(_) => Ok(()),

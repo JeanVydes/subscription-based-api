@@ -80,7 +80,7 @@ pub async fn create_customer_record(
     }
 
     let filter = build_customer_filter("", payload.email.to_lowercase().as_str()).await;
-    let (found, _) = match find_customer(state.mongo_db.clone(), filter).await {
+    let (found, _) = match find_customer(&state.mongo_db, filter).await {
         Ok(customer) => customer,
         Err((status, json)) => return (status, json)
     };
@@ -191,7 +191,7 @@ pub async fn update_name(
     payload_result: Result<Json<CustomerUpdateName>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
-    let customer_id = match get_user_id_from_req(headers, state.redis_connection.clone()).await {
+    let customer_id = match get_user_id_from_req(headers, &state.redis_connection).await {
         Ok(customer_id) => customer_id,
         Err((status_code, json)) => return (status_code, json),
     };
@@ -222,7 +222,7 @@ pub async fn update_name(
         }
     };
 
-    match update_customer(state.mongo_db.clone(), filter, update).await {
+    match update_customer(&state.mongo_db, filter, update).await {
         Ok(_) => (
             StatusCode::OK,
             Json(GenericResponse {
@@ -240,13 +240,13 @@ pub async fn update_password(
     payload_result: Result<Json<CustomerUpdatePassword>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
-    let customer_id = match get_user_id_from_req(headers, state.redis_connection.clone()).await {
+    let customer_id = match get_user_id_from_req(headers, &state.redis_connection).await {
         Ok(customer_id) => customer_id,
         Err((status_code, json)) => return (status_code, json),
     };
 
     let filter = build_customer_filter(customer_id.as_str(), "").await;
-    let (found, customer) = match find_customer(state.mongo_db.clone(), filter).await {
+    let (found, customer) = match find_customer(&state.mongo_db, filter).await {
         Ok(customer) => customer,
         Err((status, json)) => return (status, json)
     };
@@ -366,7 +366,7 @@ pub async fn update_password(
         }
     };
 
-    match update_customer(state.mongo_db.clone(), filter, update).await {
+    match update_customer(&state.mongo_db, filter, update).await {
         Ok(_) => (
             StatusCode::OK,
             Json(GenericResponse {
@@ -389,13 +389,13 @@ pub async fn add_email(
         Err((status_code, json)) => return (status_code, json),
     };
 
-    let customer_id = match get_user_id_from_req(headers, state.redis_connection.clone()).await {
+    let customer_id = match get_user_id_from_req(headers, &state.redis_connection).await {
         Ok(customer_id) => customer_id,
         Err((status_code, json)) => return (status_code, json),
     };
 
     let filter = build_customer_filter(customer_id.as_str(), "").await;
-    let (found, customer) = match find_customer(state.mongo_db.clone(), filter).await {
+    let (found, customer) = match find_customer(&state.mongo_db, filter).await {
         Ok(customer) => customer,
         Err((status, json)) => return (status, json)
     };
@@ -444,7 +444,7 @@ pub async fn add_email(
     }
 
     let filter = build_customer_filter("", email.as_str()).await;
-    let (found, customer_with_current_email) = match find_customer(state.mongo_db.clone(), filter).await {
+    let (found, customer_with_current_email) = match find_customer(&state.mongo_db, filter).await {
         Ok(customer) => customer,
         Err((status, json)) => return (status, json)
     };
@@ -498,7 +498,7 @@ pub async fn add_email(
         }
     };
 
-    match update_customer(state.mongo_db.clone(), filter, update).await {
+    match update_customer(&state.mongo_db, filter, update).await {
         Ok(_) => (
             StatusCode::OK,
             Json(GenericResponse {

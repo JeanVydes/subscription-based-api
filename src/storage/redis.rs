@@ -9,7 +9,5 @@ pub fn init_connection() -> Result<Client, RedisError> {
 
     let client = Client::open(uri)?;
 
-    println!("Connected to Redis");
-
     Ok(client)
 }

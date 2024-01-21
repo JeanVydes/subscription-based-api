@@ -40,7 +40,7 @@ fn extract_token_string(headers: &HeaderMap) -> Result<&str, (StatusCode, Json<G
 
 // Common function to get session from Redis
 async fn get_session_from_redis(
-    redis_connection: Client,
+    redis_connection: &Client,
     token_string: &str,
 ) -> Result<String, (StatusCode, Json<GenericResponse>)> {
     let result = redis_connection.clone().get::<String, String>(token_string.to_string());
@@ -60,7 +60,7 @@ async fn get_session_from_redis(
 
 pub async fn get_user_id_from_req(
     headers: HeaderMap,
-    redis_connection: Client,
+    redis_connection: &Client,
 ) -> Result<String, (StatusCode, Json<GenericResponse>)> {
     let token_string = extract_token_string(&headers)?;
     let _ = match validate_token(token_string) {
@@ -81,7 +81,7 @@ pub async fn get_session(
     headers: HeaderMap,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
-    let id = match get_user_id_from_req(headers, state.redis_connection.clone()).await {
+    let id = match get_user_id_from_req(headers, &state.redis_connection).await {
         Ok(id) => id,
         Err((status_code, json)) => return (status_code, json)
     };
@@ -131,7 +131,7 @@ pub async fn request_credentials(
     }
 
     let filter = build_customer_filter("", payload.email.as_str()).await;
-    let (found, customer) = match find_customer(state.mongo_db.clone(), filter).await {
+    let (found, customer) = match find_customer(&state.mongo_db, filter).await {
         Ok((found, customer)) => (found, customer),
         Err((status_code, json)) => return (status_code, json),
     };
