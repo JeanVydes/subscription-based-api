@@ -8,6 +8,7 @@ primary_region = "bog"
   dockerfile = "Dockerfile"
 
 [env]
+  API_URL="8i-test-machine.fly.dev"
   API_TOKENS_EXPIRATION_TIME = "86400"
   HOST = "0.0.0.0"
   MONGO_DB_NAME = "test"
@@ -15,6 +16,8 @@ primary_region = "bog"
   PRO_PRODUCT_ID="160756"
   PRO_MONTHLY_VARIANT_ID="202405"
   PRO_ANNUALLY_VARIANT_ID="202400"
+  ENABLE_EMAIL_VERIFICATION="true"
+  BREVO_CUSTOMERS_LIST_ID="7"
 
 [http_service]
   internal_port = 8080

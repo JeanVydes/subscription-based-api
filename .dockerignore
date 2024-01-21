@@ -2,3 +2,5 @@
 **/*.env
 target
 fly.toml
+.vscode
+.github

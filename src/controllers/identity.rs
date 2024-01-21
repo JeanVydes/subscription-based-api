@@ -1,17 +1,22 @@
 use crate::utilities::helpers::payload_analyzer;
 use crate::server::AppState;
-use crate::storage::mongo::{build_customer_filter, find_customer};
+use crate::storage::mongo::{build_customer_filter, find_customer, update_customer};
 use crate::utilities::token::{create_token, validate_token};
 use crate::types::customer::GenericResponse;
 use crate::types::incoming_requests::SignIn;
 
 use axum::http::HeaderMap;
-use axum::{extract::rejection::JsonRejection, http::StatusCode, Json};
+use axum::{
+    extract::{Query, rejection::JsonRejection}, 
+    http::StatusCode, Json
+};
+use mongodb::bson::doc;
 use regex::Regex;
 use std::sync::Arc;
 
 use bcrypt::verify;
 use redis::{Client, Commands, RedisError};
+use serde::Deserialize;
 use serde_json::json;
 
 fn extract_token_string(headers: &HeaderMap) -> Result<&str, (StatusCode, Json<GenericResponse>)> {
@@ -229,4 +234,104 @@ pub async fn request_credentials(
             exited_code: 0,
         }),
     );
+}
+
+
+#[derive(Debug, Deserialize)]
+pub struct VerifyEmailQueryParams {
+    pub token: Option<String>,
+}
+
+pub async fn verify_email(
+    Query(params): Query<VerifyEmailQueryParams>,
+    state: Arc<AppState>,
+) -> (StatusCode, Json<GenericResponse>) {
+    let token = match params.token {
+        Some(token) => token,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(GenericResponse {
+                    message: String::from("token not provided"),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    let mut redis_conn = match state.redis_connection.get_connection() {
+        Ok(redis_conn) => redis_conn,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: String::from("error connecting to redis"),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    let customer_email_address: String = match redis_conn.get(token.clone()) {
+        Ok(customer_email_address) => customer_email_address,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: format!("error getting session: {}", err),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    if customer_email_address.is_empty() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(GenericResponse {
+                message: String::from("unauthorized"),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        );
+    }
+
+    let filter = build_customer_filter("", customer_email_address.as_str()).await;
+    let update = doc! {
+        "$set": {
+            "emails.$.verified": true,
+        }
+    };
+
+    match update_customer(&state.mongo_db, filter, update).await {
+        Ok(_) => (),
+        Err((status, json)) => return (status, json)
+    };
+
+    let result: Result<bool, RedisError> = redis_conn.del(token.clone());
+    match result {
+        Ok(_) => (),
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: format!("error deleting session: {}", err),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(GenericResponse {
+            message: String::from("email verified"),
+            data: json!({}),
+            exited_code: 0,
+        }),
+    )
 }

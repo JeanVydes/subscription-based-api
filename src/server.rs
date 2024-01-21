@@ -17,8 +17,10 @@ use diesel::{r2d2::ConnectionManager, PgConnection};
 use mongodb::{Client as MongoClient, Database};
 use r2d2::Pool;
 use redis::Client as RedisClient;
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, time::Duration};
 
+use tower_http::timeout::TimeoutLayer;
+use tower_http::trace::TraceLayer;
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
@@ -28,12 +30,15 @@ use log::info;
 
 #[derive(Clone)]
 pub struct AppState {
+    pub api_url: String,
     pub mongodb_client: MongoClient,
     pub redis_connection: RedisClient,
     pub postgres_conn: Option<Pool<ConnectionManager<PgConnection>>>,
     pub mongo_db: Database,
     pub lemonsqueezy_webhook_signature_key: String,
     pub products: Products,
+    pub enabled_email_verification: bool,
+    pub api_tokens_expiration_time: i64,
 }
 
 pub async fn init(mongodb_client: MongoClient, redis_connection: RedisClient, postgres_conn: Option<Pool<ConnectionManager<PgConnection>>>) {
@@ -73,6 +78,7 @@ pub async fn init(mongodb_client: MongoClient, redis_connection: RedisClient, po
         .nest("/api", api)
         .layer(cors)
         .layer(CompressionLayer::new())
+        .layer(TimeoutLayer::new(Duration::from_secs(10)),)
         .fallback(fallback)
         .with_state(app_state);
 
@@ -82,16 +88,23 @@ pub async fn init(mongodb_client: MongoClient, redis_connection: RedisClient, po
 
     info!("Starting server on {}", address);
 
-    match axum::Server::bind(&address.parse().unwrap())
-        .serve(app.into_make_service())
-        .await
-    {
-        Ok(_) => {},
+    let listener = match tokio::net::TcpListener::bind(address).await {
+        Ok(listener) => listener,
+        Err(e) => panic!("Error binding to address: {}", e),
+    };
+
+    match axum::serve(listener, app).await {
+        Ok(_) => info!("Server started"),
         Err(e) => panic!("Error starting server: {}", e),
     };
 }
 
 pub async fn set_app_state(mongodb_client: MongoClient, redis_connection: RedisClient, postgres_conn: Option<Pool<ConnectionManager<PgConnection>>>) -> Arc<AppState> {
+    let api_url = match env::var("API_URL") {
+        Ok(url) => url,
+        Err(_) => panic!("api_url not found"),
+    };
+
     let mongo_db = match env::var("MONGO_DB_NAME") {
         Ok(db) => db,
         Err(_) => panic!("mongo_db_name not found"),
@@ -124,6 +137,16 @@ pub async fn set_app_state(mongodb_client: MongoClient, redis_connection: RedisC
         pro_annually_variant_id,
     };
 
+    let enabled_email_verification = match std::env::var("ENABLE_EMAIL_VERIFICATION").expect("ENABLE_EMAIL_VERIFICATION must be set").parse::<bool>() {
+        Ok(val) => val,
+        Err(_) => panic!("ENABLE_EMAIL_VERIFICATION must be a boolean"),
+    };
+
+    let api_tokens_expiration_time = match std::env::var("API_TOKENS_EXPIRATION_TIME").expect("API_TOKENS_EXPIRATION_TIME must be set").parse::<i64>() {
+        Ok(val) => val,
+        Err(_) => panic!("API_TOKENS_EXPIRATION_TIME must be a number"),
+    };
+
     let app_state = Arc::new(AppState {
         mongodb_client,
         redis_connection,
@@ -131,6 +154,9 @@ pub async fn set_app_state(mongodb_client: MongoClient, redis_connection: RedisC
         mongo_db,
         lemonsqueezy_webhook_signature_key,
         products,
+        enabled_email_verification,
+        api_tokens_expiration_time,
+        api_url,
     });
 
     return app_state;

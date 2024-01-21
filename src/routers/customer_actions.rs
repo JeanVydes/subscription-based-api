@@ -2,8 +2,9 @@ use axum::{BoxError, Json};
 use axum::error_handling::HandleErrorLayer;
 use axum::extract::rejection::JsonRejection;
 use axum::http::{StatusCode, HeaderMap};
-use axum::{Router, routing::patch};
+use axum::{Router, routing::{get, patch}};
 use crate::controllers::customer::{update_name, update_password, add_email};
+use crate::controllers::identity::verify_email;
 use crate::server::AppState;
 use crate::types::incoming_requests::{CustomerUpdateName, CustomerUpdatePassword, CustomerAddEmail};
 use std::{sync::Arc, time::Duration};
@@ -37,6 +38,15 @@ pub async fn get_customer_actions_router(app_state: Arc<AppState>) -> Router<Arc
                 let app_state = Arc::clone(&app_state);
                 move |(headers, payload): (HeaderMap, Result<Json<CustomerAddEmail>, JsonRejection>)| {
                     add_email(headers, payload, app_state)
+                }
+            }),
+        )
+        .route(
+            "/verify/email",
+            get({
+                let app_state = Arc::clone(&app_state);
+                move |query_params| {
+                   verify_email(query_params, app_state)
                 }
             }),
         )

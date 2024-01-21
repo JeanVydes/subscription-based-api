@@ -28,26 +28,34 @@ also i create a postman api reference, you have to replicate that in your fronte
 # .env Template
 
 ```
-HOST=0.0.0.0
-PORT=8080
+HOST=0.0.0.0                        # Not Sensitive Data (fly.toml)
+PORT=8080                           # Not Sensitive Data (fly.toml)
+
+API_URL=                            # Not Sensitive Data (fly.toml)
 
 POSTGRES_URI=                       # (optional) fly secrets set POSTGRES_URI=
 MONGO_URI=                          # fly secrets set MONGO_URI=
 REDIS_URI=                          # fly secrets set REDIS_URI=
-MONGO_DB_NAME=
+MONGO_DB_NAME=                      #  Not Sensitive Data (fly.toml)
 
 API_TOKENS_SIGNING_KEY=             # fly secrets set API_TOKENS_SIGNING_KEY=
 API_TOKENS_EXPIRATION_TIME=
 
 LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY= # fly secrets set LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY=
-PRO_PRODUCT_ID=
-PRO_MONTHLY_VARIANT_ID=
-PRO_ANNUALLY_VARIANT_ID=
+PRO_PRODUCT_ID=                     # Not Sensitive Data (fly.toml)
+PRO_MONTHLY_VARIANT_ID=             # Not Sensitive Data (fly.toml)
+PRO_ANNUALLY_VARIANT_ID=            # Not Sensitive Data (fly.toml)
+
+ENABLE_EMAIL_VERIFICATION=          # Not Sensitive Data (fly.toml)
+BREVO_CUSTOMERS_LIST_ID=            # Not Sensitive Data (fly.toml)
+BREVO_CUSTOMERS_WEBFLOW_API_KEY=    # fly secrets set BREVO_CUSTOMERS_WEBFLOW_API_KEY=
 ```
 
 # Future Ideas
 
 * Next.js template
+* auth reset token
+* email verification
 
 # Help
 

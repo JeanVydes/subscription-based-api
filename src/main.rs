@@ -6,6 +6,7 @@ mod storage;
 mod types;
 mod utilities;
 mod routers;
+mod email;
 
 use std::env;
 use chrono::Local;
@@ -83,6 +84,7 @@ async fn load_env() -> String {
         Err(_) => String::new(),
     };
 
+    env::var("API_URL").expect("API_URL must be set");
     env::var("MONGO_URI").expect("DATABASE_URL must be set");
     env::var("MONGO_DB_NAME").expect("DB_NAME must be set");
     env::var("REDIS_URI").expect("REDIS_URI must be set");
@@ -90,6 +92,23 @@ async fn load_env() -> String {
     env::var("API_TOKENS_SIGNING_KEY").expect("API_SIGNING_KEY must be set");
     env::var("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY").expect("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY must be set");
 
+    let email_verification = match std::env::var("ENABLE_EMAIL_VERIFICATION").expect("ENABLE_EMAIL_VERIFICATION must be set").parse::<bool>() {
+        Ok(val) => val,
+        Err(_) => panic!("ENABLE_EMAIL_VERIFICATION must be a boolean"),
+    };
+
+    let created_customer_list = std::env::var("BREVO_CUSTOMERS_LIST_ID");
+    let api_key = std::env::var("BREVO_CUSTOMERS_WEBFLOW_API_KEY");
+
+    if email_verification {
+        if api_key.is_err() {
+            warn!("BREVO_CUSTOMERS_WEBFLOW_API_KEY isn't set, skipping Brevo integration, including email verification");
+        }
+    
+        if api_key.is_ok() && created_customer_list.is_err() {
+            warn!("BREVO_CUSTOMERS_LIST_ID isn't set, using default list");
+        }
+    }
         
     let expiration_time = match env::var("API_TOKENS_EXPIRATION_TIME") {
         Ok(expiration_time) => expiration_time,

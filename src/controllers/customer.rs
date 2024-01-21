@@ -1,3 +1,4 @@
+use crate::email::actions::{send_create_contact_request, send_verification_email};
 use crate::utilities::helpers::{payload_analyzer, random_string, valid_password, valid_email, parse_class};
 use crate::storage::mongo::{build_customer_filter, find_customer, update_customer};
 use crate::types::customer::{Customer, Email, Preferences};
@@ -11,6 +12,8 @@ use chrono::Utc;
 use mongodb::bson::doc;
 use serde_json::json;
 use std::sync::Arc;
+
+use redis::{Commands, RedisError};
 
 use bcrypt::{hash, DEFAULT_COST, verify};
 
@@ -176,6 +179,83 @@ pub async fn create_customer_record(
         }
     }
 
+
+    let created_customer_list = std::env::var("BREVO_CUSTOMERS_LIST_ID");
+    let api_key = std::env::var("BREVO_CUSTOMERS_WEBFLOW_API_KEY");
+    
+    if created_customer_list.is_ok() && api_key.is_ok() {
+        let created_customer_list = match created_customer_list.unwrap().parse::<u32>() {
+            Ok(list_id) => list_id,
+            Err(_) => 1,
+        };
+
+        let api_key = api_key.unwrap();
+        match send_create_contact_request(&api_key, vec![created_customer_list], &customer.id, &customer.emails[0].address).await {
+            Ok(_) => (),
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(GenericResponse {
+                        message: String::from("error registering email in email marketing service"),
+                        data: json!({}),
+                        exited_code: 1,
+                    }),
+                )
+            }
+        };
+
+        if state.enabled_email_verification {
+            let new_token = random_string(30).await;
+            let mut redis_conn = match state.redis_connection.get_connection() {
+                Ok(redis_conn) => redis_conn,
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(GenericResponse {
+                            message: String::from("error connecting to redis"),
+                            data: json!({}),
+                            exited_code: 0,
+                        }),
+                    )
+                }
+            };
+        
+            let result: Result<bool, RedisError> =
+                redis_conn
+                    .set_ex(new_token.clone(), &customer.emails[0].address, state.api_tokens_expiration_time.try_into().unwrap_or(86000));
+
+            match result {
+                Ok(_) => (),
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(GenericResponse {
+                            message: String::from("error saving email token verification in redis"),
+                            data: json!({}),
+                            exited_code: 0,
+                        }),
+                    )
+                }
+            };
+
+            let greetings_title = format!("Welcome to Test App {}", customer.name);
+            let verification_link = format!("https://{}/api/me/verify/email?token={}", state.api_url, new_token);
+            match send_verification_email(&api_key, 1, &customer.emails[0].address, &customer.name, verification_link, greetings_title).await {
+                Ok(_) => (),
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(GenericResponse {
+                            message: String::from("error sending verification email"),
+                            data: json!({}),
+                            exited_code: 1,
+                        }),
+                    )
+                }
+            };
+        }
+    }
+    
     (
         StatusCode::CREATED,
         Json(GenericResponse {
