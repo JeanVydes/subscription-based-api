@@ -8,11 +8,14 @@ RUN mkdir .cargo
 RUN cargo vendor > .cargo/config
 
 COPY . .
-RUN apt-get update && apt-get install -y pkg-config libssl-dev
+RUN apt-get update && apt-get install -y pkg-config libssl-dev libpq-dev
 RUN cargo build --release
 
 # Runtime Stage
 FROM fedora:34 AS runner
+
+# Install runtime dependencies, including libpq
+RUN dnf install -y libpq
 
 EXPOSE 8080
 COPY --from=builder /prod/target/release/app /bin/app
