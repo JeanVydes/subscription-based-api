@@ -1,5 +1,11 @@
 {
     "rust-analyzer.linkedProjects": [
         "./Cargo.toml"
-    ]
+    ],
+    "rust-analyzer.diagnostics.disabled": [
+        "macro-error",
+        "unresolved-macro-call",
+        "unresolved-import"
+    ],
+    "rust-analyzer.procMacro.enable": false
 }

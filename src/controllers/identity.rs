@@ -237,7 +237,6 @@ pub async fn request_credentials(
     );
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct VerifyEmailQueryParams {
     pub token: Option<String>,

@@ -1,4 +1,5 @@
-use crate::email::actions::{send_create_contact_request, send_verification_email, SendEmailData};
+use crate::email::actions::{send_create_contact_request, send_verification_email};
+use crate::types::email::SendEmailData;
 use crate::utilities::api_messages::{APIMessages, CustomerMessages, EmailMessages, InputMessages, MongoMessages, RedisMessages};
 use crate::utilities::helpers::{payload_analyzer, random_string, valid_password, valid_email, parse_class};
 use crate::storage::mongo::{build_customer_filter, find_customer, update_customer};
