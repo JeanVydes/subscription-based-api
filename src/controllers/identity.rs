@@ -1,3 +1,4 @@
+use crate::utilities::api_messages::{APIMessages, EmailMessages, RedisMessages, TokenMessages};
 use crate::utilities::helpers::payload_analyzer;
 use crate::server::AppState;
 use crate::storage::mongo::{build_customer_filter, find_customer, update_customer};
@@ -252,7 +253,7 @@ pub async fn verify_email(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(GenericResponse {
-                    message: String::from("token not provided"),
+                    message: APIMessages::Token(TokenMessages::Missing).to_string(),
                     data: json!({}),
                     exited_code: 0,
                 }),
@@ -266,7 +267,7 @@ pub async fn verify_email(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: String::from("error connecting to redis"),
+                    message: APIMessages::Redis(RedisMessages::FailedToConnect).to_string(),
                     data: json!({}),
                     exited_code: 0,
                 }),
@@ -276,11 +277,11 @@ pub async fn verify_email(
 
     let customer_email_address: String = match redis_conn.get(token.clone()) {
         Ok(customer_email_address) => customer_email_address,
-        Err(err) => {
+        Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: format!("error getting session: {}", err),
+                    message: APIMessages::Redis(RedisMessages::ErrorFetching).to_string(),
                     data: json!({}),
                     exited_code: 0,
                 }),
@@ -292,14 +293,17 @@ pub async fn verify_email(
         return (
             StatusCode::UNAUTHORIZED,
             Json(GenericResponse {
-                message: String::from("unauthorized"),
+                message: APIMessages::Unauthorized.to_string(),
                 data: json!({}),
                 exited_code: 0,
             }),
         );
     }
 
-    let filter = build_customer_filter("", customer_email_address.as_str()).await;
+    let filter = doc! {
+        "emails.address": customer_email_address,
+    };
+    
     let update = doc! {
         "$set": {
             "emails.$.verified": true,
@@ -314,11 +318,11 @@ pub async fn verify_email(
     let result: Result<bool, RedisError> = redis_conn.del(token.clone());
     match result {
         Ok(_) => (),
-        Err(err) => {
+        Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: format!("error deleting session: {}", err),
+                    message: APIMessages::Redis(RedisMessages::ErrorDeleting).to_string(),
                     data: json!({}),
                     exited_code: 0,
                 }),
@@ -329,7 +333,7 @@ pub async fn verify_email(
     (
         StatusCode::OK,
         Json(GenericResponse {
-            message: String::from("email verified"),
+            message: APIMessages::Email(EmailMessages::Verified).to_string(),
             data: json!({}),
             exited_code: 0,
         }),

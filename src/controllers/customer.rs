@@ -1,4 +1,5 @@
-use crate::email::actions::{send_create_contact_request, send_verification_email};
+use crate::email::actions::{send_create_contact_request, send_verification_email, SendEmailData};
+use crate::utilities::api_messages::{APIMessages, CustomerMessages, EmailMessages, InputMessages, MongoMessages, RedisMessages};
 use crate::utilities::helpers::{payload_analyzer, random_string, valid_password, valid_email, parse_class};
 use crate::storage::mongo::{build_customer_filter, find_customer, update_customer};
 use crate::types::customer::{Customer, Email, Preferences};
@@ -32,7 +33,7 @@ pub async fn create_customer_record(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("you must accept the terms of service and privacy"),
+                message: APIMessages::Customer(CustomerMessages::NotAcceptedTerms).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -43,7 +44,7 @@ pub async fn create_customer_record(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("invalid name, must be at least 2 characters and at most 15"),
+                message: APIMessages::Input(InputMessages::InvalidNameLength).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -64,7 +65,7 @@ pub async fn create_customer_record(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("password and password confirmation must match"),
+                message: APIMessages::Customer(CustomerMessages::PasswordConfirmationDoesNotMatch).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -75,7 +76,7 @@ pub async fn create_customer_record(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("email and password must be different"),
+                message: APIMessages::Email(EmailMessages::EmailAndPasswordMustBeDifferent).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -92,7 +93,7 @@ pub async fn create_customer_record(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("email already taken"),
+                message: APIMessages::Email(EmailMessages::Taken).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -105,7 +106,7 @@ pub async fn create_customer_record(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: String::from("error hashing password"),
+                    message: APIMessages::Customer(CustomerMessages::ErrorHashingPassword).to_string(),
                     data: json!({}),
                     exited_code: 1,
                 }),
@@ -164,22 +165,6 @@ pub async fn create_customer_record(
         deleted: false,
     };
 
-    let collection = state.mongo_db.collection("customers");
-    match collection.insert_one(customer.clone(), None).await {
-        Ok(_) => (),
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(GenericResponse {
-                    message: String::from("error inserting record into database"),
-                    data: json!({}),
-                    exited_code: 1,
-                }),
-            )
-        }
-    }
-
-
     let created_customer_list = std::env::var("BREVO_CUSTOMERS_LIST_ID");
     let api_key = std::env::var("BREVO_CUSTOMERS_WEBFLOW_API_KEY");
     
@@ -196,7 +181,7 @@ pub async fn create_customer_record(
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(GenericResponse {
-                        message: String::from("error registering email in email marketing service"),
+                        message: APIMessages::Customer(CustomerMessages::ErrorRegisteringCustomerInMarketingPlatform).to_string(),
                         data: json!({}),
                         exited_code: 1,
                     }),
@@ -204,7 +189,7 @@ pub async fn create_customer_record(
             }
         };
 
-        if state.enabled_email_verification {
+        if state.enabled_email_integration {
             let new_token = random_string(30).await;
             let mut redis_conn = match state.redis_connection.get_connection() {
                 Ok(redis_conn) => redis_conn,
@@ -212,7 +197,7 @@ pub async fn create_customer_record(
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(GenericResponse {
-                            message: String::from("error connecting to redis"),
+                            message: APIMessages::Redis(RedisMessages::FailedToConnect).to_string(),
                             data: json!({}),
                             exited_code: 0,
                         }),
@@ -230,7 +215,7 @@ pub async fn create_customer_record(
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(GenericResponse {
-                            message: String::from("error saving email token verification in redis"),
+                            message: APIMessages::Redis(RedisMessages::ErrorSettingKey).to_string(),
                             data: json!({}),
                             exited_code: 0,
                         }),
@@ -240,13 +225,25 @@ pub async fn create_customer_record(
 
             let greetings_title = format!("Welcome to Test App {}", customer.name);
             let verification_link = format!("https://{}/api/me/verify/email?token={}", state.api_url, new_token);
-            match send_verification_email(&api_key, 1, &customer.emails[0].address, &customer.name, verification_link, greetings_title).await {
+            let send_email_data = SendEmailData {
+                api_key,
+                subject: "Verify Your Email Address To Start Using Test App".to_string(),
+                template_id: state.email_provider_settings.email_verification_template_id,
+                customer_email: customer.emails[0].address.clone(),
+                customer_name: customer.name.clone(),
+                verification_link,
+                greetings_title,
+                sender_email: state.master_email_entity.email.clone(),
+                sender_name: state.master_email_entity.name.clone(),
+            };
+
+            match send_verification_email(send_email_data).await {
                 Ok(_) => (),
                 Err(_) => {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(GenericResponse {
-                            message: String::from("error sending verification email"),
+                            message: APIMessages::Email(EmailMessages::ErrorSendingVerificationEmail).to_string(),
                             data: json!({}),
                             exited_code: 1,
                         }),
@@ -255,11 +252,26 @@ pub async fn create_customer_record(
             };
         }
     }
+
+    let collection = state.mongo_db.collection("customers");
+    match collection.insert_one(customer.clone(), None).await {
+        Ok(_) => (),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: APIMessages::Mongo(MongoMessages::ErrorInserting).to_string(),
+                    data: json!({}),
+                    exited_code: 1,
+                }),
+            )
+        }
+    }
     
     (
         StatusCode::CREATED,
         Json(GenericResponse {
-            message: String::from("customer record registered successfully"),
+            message: APIMessages::Customer(CustomerMessages::Created).to_string(),
             data: json!(customer),
             exited_code: 0,
         }),
@@ -285,7 +297,7 @@ pub async fn update_name(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("invalid name, must be at least 2 characters and at most 15"),
+                message: APIMessages::Input(InputMessages::InvalidNameLength).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -306,7 +318,7 @@ pub async fn update_name(
         Ok(_) => (
             StatusCode::OK,
             Json(GenericResponse {
-                message: String::from("customer name updated successfully"),
+                message: APIMessages::Customer(CustomerMessages::NameUpdated).to_string(),
                 data: json!({}),
                 exited_code: 0,
             }),
@@ -335,7 +347,7 @@ pub async fn update_password(
         return (
             StatusCode::NOT_FOUND,
             Json(GenericResponse {
-                message: String::from("customer not found"),
+                message: APIMessages::Customer(CustomerMessages::NotFound).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -351,7 +363,7 @@ pub async fn update_password(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("invalid old password, must be at least 8 characters"),
+                message: APIMessages::Input(InputMessages::InvalidOldPasswordLength).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -362,7 +374,7 @@ pub async fn update_password(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("invalid new password, must be at least 8 characters"),
+                message: APIMessages::Input(InputMessages::InvalidNewPasswordLength).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -378,7 +390,7 @@ pub async fn update_password(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("new password and old password must be different"),
+                message: APIMessages::Input(InputMessages::NewPasswordAndOldPasswordMustBeDifferent).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -389,7 +401,7 @@ pub async fn update_password(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("new password and new password confirmation must match"),
+                message: APIMessages::Input(InputMessages::NewPasswordConfirmationMustMatch).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -402,7 +414,7 @@ pub async fn update_password(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: String::from("error hashing password"),
+                    message: APIMessages::Customer(CustomerMessages::ErrorHashingPassword).to_string(),
                     data: json!({}),
                     exited_code: 1,
                 }),
@@ -417,7 +429,7 @@ pub async fn update_password(
                 return (
                     StatusCode::UNAUTHORIZED,
                     Json(GenericResponse {
-                        message: String::from("unauthorized: incorrect current password"),
+                        message: APIMessages::Customer(CustomerMessages::IncorrectPassword).to_string(),
                         data: json!({}),
                         exited_code: 0,
                     }),
@@ -428,7 +440,7 @@ pub async fn update_password(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: String::from("error verifying password"),
+                    message: APIMessages::Customer(CustomerMessages::ErrorVerifyingPassword).to_string(),
                     data: json!({}),
                     exited_code: 0,
                 }),
@@ -450,7 +462,7 @@ pub async fn update_password(
         Ok(_) => (
             StatusCode::OK,
             Json(GenericResponse {
-                message: String::from("customer password updated successfully"),
+                message: APIMessages::Customer(CustomerMessages::PasswordUpdated).to_string(),
                 data: json!({}),
                 exited_code: 0,
             }),
@@ -484,7 +496,7 @@ pub async fn add_email(
         return (
             StatusCode::NOT_FOUND,
             Json(GenericResponse {
-                message: String::from("customer not found"),
+                message: APIMessages::Customer(CustomerMessages::NotFound).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -497,7 +509,7 @@ pub async fn add_email(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("you can only have up to 5 emails"),
+                message: APIMessages::Email(EmailMessages::MaxEmailsReached).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -515,7 +527,7 @@ pub async fn add_email(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(GenericResponse {
-                    message: String::from("email already registered"),
+                    message: APIMessages::Email(EmailMessages::Taken).to_string(),
                     data: json!({}),
                     exited_code: 1,
                 }),
@@ -534,7 +546,7 @@ pub async fn add_email(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(GenericResponse {
-                    message: String::from("email already registered by other customer"),
+                    message: APIMessages::Email(EmailMessages::TakenByOtherCustomer).to_string(),
                     data: json!({}),
                     exited_code: 1,
                 }),
@@ -544,7 +556,7 @@ pub async fn add_email(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("email already registered by you"),
+                message: APIMessages::Email(EmailMessages::TakenByYou).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -582,7 +594,7 @@ pub async fn add_email(
         Ok(_) => (
             StatusCode::OK,
             Json(GenericResponse {
-                message: String::from("customer email updated successfully"),
+                message: APIMessages::Customer(CustomerMessages::EmailAdded).to_string(),
                 data: json!({}),
                 exited_code: 0,
             }),

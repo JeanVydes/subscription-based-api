@@ -1,6 +1,5 @@
 use serde::Serialize;
 use std::error::Error;
-use log::warn;
 
 #[derive(Debug, Serialize)]
 pub struct CreateContact {
@@ -51,86 +50,93 @@ pub async fn send_create_contact_request(api_key: &String, list_ids: Vec<u32>, e
 }
 
 #[derive(Debug, Serialize)]
-struct Sender {
+pub struct Sender {
     email: String,
     name: String,
 }
 
 #[derive(Debug, Serialize)]
-struct To {
+pub struct To {
     email: String,
     name: String,
 }
 
 #[derive(Debug, Serialize)]
-struct Params {
+pub struct Params {
     verification_link: String,
     greetings_title: String,
 }
 
 #[derive(Debug, Serialize)]
-struct MessageVersion {
+pub struct MessageVersion {
     to: To,
     params: Params,
     subject: String,
 }
 
 #[derive(Debug, Serialize)]
-struct CreateEmailRequest {
+pub struct CreateEmailRequest {
     sender: Sender,
     subject: Option<String>,
     #[serde(rename = "templateId")]
     template_id: u32,
     params: Params,
-    #[serde(rename = "messageVersions")]
-    message_versions: Vec<MessageVersion>,
+    to: Vec<To>,
+    #[serde(rename = "replyTo")]
+    reply_to: To,
+}
+
+pub struct SendEmailData {
+    pub api_key: String,
+    pub template_id: u32,
+    pub subject: String,
+    pub sender_email: String,
+    pub sender_name: String,
+    pub customer_email: String,
+    pub customer_name: String,
+    pub verification_link: String,
+    pub greetings_title: String,
 }
 
 // Verify Email
-pub async fn send_verification_email(api_key: &String, template_id: u32, customer_email: &String, customer_name: &String, verification_link: String, greetings_title: String) -> Result<(), Box<dyn Error>> {
+pub async fn send_verification_email(data: SendEmailData) -> Result<(), Box<dyn Error>> {
     let api_url = "https://api.brevo.com/v3/smtp/email";
     let client = reqwest::Client::new();
 
     let create_email_request = CreateEmailRequest {
         sender: Sender {
-            email: "contact@nazi.email".to_string(),
-            name: "Jean Services".to_string(),
+            email: data.sender_email.clone(),
+            name: data.sender_name.clone(),
         },
-        subject: Some("Verify Your Email".to_string()),
-        template_id: template_id,
+        subject: Some(data.subject),
+        template_id: data.template_id,
         params: Params {
-            verification_link: verification_link.clone(),
-            greetings_title: greetings_title.clone(),
+            verification_link: data.verification_link,
+            greetings_title: data.greetings_title,
         },
-        message_versions: vec![MessageVersion {
-            to: To {
-                email: customer_email.to_owned(),
-                name: customer_name.to_owned(),
-            },
-            params: Params {
-                verification_link,
-                greetings_title,
-            },
-            subject: "Verify Your Email".to_string(),
+        to: vec![To{
+                email: data.customer_email,
+                name: data.customer_name,
         }],
+        reply_to: To{
+            email: data.sender_email,
+            name: data.sender_name,
+        },
     };
 
-    warn!("create_email_request: {:?}", create_email_request);
     let json_body = serde_json::to_value(create_email_request)?;
-    warn!("json_body: {:?}", json_body);
 
     let response = client
         .post(api_url)
         .header("accept", "application/json")
         .header("content-type", "application/json")
-        .header("api-key", api_key)
+        .header("api-key", data.api_key)
         .body(json_body.to_string())
         .send()
         .await?;
 
     if !response.status().is_success() {
         let error_message = response.text().await?;
-        warn!("Error sending verification email: {}", error_message);
         return Err(Box::from(error_message));
     }
     

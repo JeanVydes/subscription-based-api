@@ -7,6 +7,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use super::api_messages::{APIMessages, TokenMessages};
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub aud: String,
@@ -29,7 +31,7 @@ pub fn create_token(id: &String) -> Result<std::string::String, String> {
 
     let signing_key = match env::var("API_TOKENS_SIGNING_KEY") {
         Ok(key) => key,
-        Err(_) => return Err(String::from("not signing key found")),
+        Err(_) => return Err(APIMessages::Token(TokenMessages::NotSigningKeyFound).to_string()),
     };
 
     match encode(
@@ -38,7 +40,7 @@ pub fn create_token(id: &String) -> Result<std::string::String, String> {
         &EncodingKey::from_secret(signing_key.as_ref()),
     ) {
         Ok(t) => Ok(t),
-        Err(_) => Err(String::from("error creating token")),
+        Err(_) => Err(APIMessages::Token(TokenMessages::ErrorCreating).to_string()),
     }
 }
 
@@ -47,7 +49,7 @@ pub fn validate_token(token: &str) -> Result<TokenData<Claims>, String> {
 
     let signing_key = match env::var("API_TOKENS_SIGNING_KEY") {
         Ok(key) => key,
-        Err(_) => return Err(String::from("not signing key found")),
+        Err(_) => return Err(APIMessages::Token(TokenMessages::ErrorValidating).to_string()),
     };
 
     let token_data = match decode::<Claims>(
@@ -56,13 +58,13 @@ pub fn validate_token(token: &str) -> Result<TokenData<Claims>, String> {
         &validation,
     ) {
         Ok(t) => t,
-        Err(_) => return Err(String::from("error validating token")),
+        Err(_) => return Err(APIMessages::Token(TokenMessages::ErrorValidating).to_string()),
     };
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
     if now.as_secs() > token_data.claims.exp as u64 {
-        return Err(String::from("expired token"));
+        return Err(APIMessages::Token(TokenMessages::Expired).to_string());
     }
 
     Ok(token_data)

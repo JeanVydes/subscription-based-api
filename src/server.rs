@@ -20,7 +20,6 @@ use redis::Client as RedisClient;
 use std::{env, sync::Arc, time::Duration};
 
 use tower_http::timeout::TimeoutLayer;
-use tower_http::trace::TraceLayer;
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
@@ -29,16 +28,34 @@ use tower_http::{
 use log::info;
 
 #[derive(Clone)]
+pub struct MasterEmailEntity {
+    pub email: String,
+    pub name: String,
+}
+
+#[derive(Clone)]
+pub struct EmailProviderSettings {
+    pub email_verification_template_id: u32,
+}
+
+#[derive(Clone)]
 pub struct AppState {
     pub api_url: String,
+    pub api_tokens_expiration_time: i64,
+
     pub mongodb_client: MongoClient,
+    pub mongo_db: Database,
+
     pub redis_connection: RedisClient,
     pub postgres_conn: Option<Pool<ConnectionManager<PgConnection>>>,
-    pub mongo_db: Database,
+
     pub lemonsqueezy_webhook_signature_key: String,
     pub products: Products,
-    pub enabled_email_verification: bool,
-    pub api_tokens_expiration_time: i64,
+    
+    pub enabled_email_integration: bool,
+    pub master_email_entity: MasterEmailEntity,
+    pub email_provider_settings: EmailProviderSettings,
+
 }
 
 pub async fn init(mongodb_client: MongoClient, redis_connection: RedisClient, postgres_conn: Option<Pool<ConnectionManager<PgConnection>>>) {
@@ -117,17 +134,26 @@ pub async fn set_app_state(mongodb_client: MongoClient, redis_connection: RedisC
     };
 
     let pro_product_id = match env::var("PRO_PRODUCT_ID") {
-        Ok(id) => id.parse::<i64>().unwrap(),
+        Ok(id) => match id.parse::<i64>() {
+            Ok(id) => id,
+            Err(_) => panic!("pro_product_id must be a number"),
+        },
         Err(_) => panic!("pro_product_id not found"),
     };
 
     let pro_monthly_variant_id = match env::var("PRO_MONTHLY_VARIANT_ID") {
-        Ok(id) => id.parse::<i64>().unwrap(),
+        Ok(id) => match id.parse::<i64>() {
+            Ok(id) => id,
+            Err(_) => panic!("pro_monthly_variant_id must be a number"),
+        },
         Err(_) => panic!("pro_monthly_variant_id not found"),
     };
 
     let pro_annually_variant_id = match env::var("PRO_ANNUALLY_VARIANT_ID") {
-        Ok(id) => id.parse::<i64>().unwrap(),
+        Ok(id) => match id.parse::<i64>() {
+            Ok(id) => id,
+            Err(_) => panic!("pro_annually_variant_id must be a number"),
+        },
         Err(_) => panic!("pro_annually_variant_id not found"),
     };
 
@@ -137,14 +163,40 @@ pub async fn set_app_state(mongodb_client: MongoClient, redis_connection: RedisC
         pro_annually_variant_id,
     };
 
-    let enabled_email_verification = match std::env::var("ENABLE_EMAIL_VERIFICATION").expect("ENABLE_EMAIL_VERIFICATION must be set").parse::<bool>() {
+    let enabled_email_integration = match std::env::var("ENABLE_EMAIL_INTEGRATION").expect("ENABLE_EMAIL_INTEGRATION must be set").parse::<bool>() {
         Ok(val) => val,
-        Err(_) => panic!("ENABLE_EMAIL_VERIFICATION must be a boolean"),
+        Err(_) => panic!("ENABLE_EMAIL_INTEGRATION must be a boolean"),
     };
 
     let api_tokens_expiration_time = match std::env::var("API_TOKENS_EXPIRATION_TIME").expect("API_TOKENS_EXPIRATION_TIME must be set").parse::<i64>() {
         Ok(val) => val,
         Err(_) => panic!("API_TOKENS_EXPIRATION_TIME must be a number"),
+    };
+
+    let master_email_address = env::var("BREVO_MASTER_EMAIL_ADDRESS");
+    let master_name = env::var("BREVO_MASTER_NAME");
+
+    let master_email_entity = MasterEmailEntity {
+        email: match master_email_address {
+            Ok(email) => email,
+            Err(_) => panic!("BREVO_MASTER_EMAIL_ADDRESS not found"),
+        },
+        name: match master_name {
+            Ok(name) => name,
+            Err(_) => panic!("BREVO_MASTER_NAME not found"),
+        },
+    };
+
+    let email_verification_template_id = match env::var("BREVO_EMAIL_VERIFY_TEMPLATE_ID") {
+        Ok(id) => match id.parse::<u32>() {
+            Ok(id) => id,
+            Err(_) => panic!("BREVO_EMAIL_VERIFY_TEMPLATE_ID must be a number"),
+        },
+        Err(_) => panic!("BREVO_EMAIL_VERIFY_TEMPLATE_ID not found"),
+    };
+
+    let email_provider_settings = EmailProviderSettings {
+        email_verification_template_id,
     };
 
     let app_state = Arc::new(AppState {
@@ -154,9 +206,11 @@ pub async fn set_app_state(mongodb_client: MongoClient, redis_connection: RedisC
         mongo_db,
         lemonsqueezy_webhook_signature_key,
         products,
-        enabled_email_verification,
+        enabled_email_integration,
         api_tokens_expiration_time,
         api_url,
+        master_email_entity,
+        email_provider_settings,
     });
 
     return app_state;

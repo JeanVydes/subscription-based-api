@@ -10,13 +10,15 @@ use rand::{thread_rng, Rng};
 use regex::Regex;
 use serde_json::json;
 
+use super::api_messages::{APIMessages, CustomerMessages, EmailMessages, InputMessages};
+
 pub fn payload_analyzer<T>(
     payload_result: Result<Json<T>, JsonRejection>,
 ) -> Result<Json<T>, (StatusCode, Json<GenericResponse>)> {
     let payload = match payload_result {
         Ok(payload) => payload,
         Err(err) => {
-            let message = format!("invalid payload: {}", err);
+            let message = format!("invalid.payload: {}", err);
             let json = Json(GenericResponse {
                 message,
                 data: json!({}),
@@ -31,7 +33,7 @@ pub fn payload_analyzer<T>(
 }
 
 pub async fn fallback(uri: Uri) -> (StatusCode, Json<GenericResponse>) {
-    let message = format!("invalid endpoint: {}", uri.path());
+    let message = format!("invalid.endpoint.{}", uri.path());
     (
         StatusCode::NOT_FOUND,
         Json(GenericResponse {
@@ -55,7 +57,7 @@ pub async fn valid_email(email: &String) -> Result<bool, (StatusCode, Json<Gener
         return Err((
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("email must be between 5 and 100 characters"),
+                message: APIMessages::Email(EmailMessages::Invalid).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -67,7 +69,7 @@ pub async fn valid_email(email: &String) -> Result<bool, (StatusCode, Json<Gener
         return Err((
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("invalid email"),
+                message: APIMessages::Email(EmailMessages::Invalid).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -82,7 +84,7 @@ pub async fn valid_password(password: &String) -> Result<bool, (StatusCode, Json
         return Err((
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("password must be between 8 and 100 characters"),
+                message: APIMessages::Input(InputMessages::InvalidNewPasswordLength).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -94,7 +96,7 @@ pub async fn valid_password(password: &String) -> Result<bool, (StatusCode, Json
         return Err((
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("password must contain at least one letter and one number"),
+                message: APIMessages::Input(InputMessages::PasswordMustHaveAtLeastOneLetterAndOneNumber).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -114,7 +116,7 @@ pub async fn parse_class(raw_class: &String) -> Result<CustomerType, (StatusCode
         return Err((
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("invalid customer type"),
+                message: APIMessages::Customer(CustomerMessages::InvalidType).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),

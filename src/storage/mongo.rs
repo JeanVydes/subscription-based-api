@@ -72,7 +72,8 @@ pub async fn update_customer(db: &Database, filter: Document, update: Document) 
     let collection = get_customers_collection(db).await;
     match collection.update_one(filter, update, None).await {
         Ok(_) => Ok(()),
-        Err(_) => {
+        Err(err) => {
+            log::error!("error updating customer: {}", err);
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {

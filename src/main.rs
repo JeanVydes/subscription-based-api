@@ -92,21 +92,40 @@ async fn load_env() -> String {
     env::var("API_TOKENS_SIGNING_KEY").expect("API_SIGNING_KEY must be set");
     env::var("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY").expect("LEMONSQUEEZY_WEBHOOK_SIGNATURE_KEY must be set");
 
-    let email_verification = match std::env::var("ENABLE_EMAIL_VERIFICATION").expect("ENABLE_EMAIL_VERIFICATION must be set").parse::<bool>() {
+    let email_integration = match env::var("ENABLE_EMAIL_INTEGRATION").expect("ENABLE_EMAIL_INTEGRATION must be set").parse::<bool>() {
         Ok(val) => val,
-        Err(_) => panic!("ENABLE_EMAIL_VERIFICATION must be a boolean"),
+        Err(_) => panic!("ENABLE_EMAIL_INTEGRATION must be a boolean"),
     };
 
-    let created_customer_list = std::env::var("BREVO_CUSTOMERS_LIST_ID");
-    let api_key = std::env::var("BREVO_CUSTOMERS_WEBFLOW_API_KEY");
+    let created_customer_list = env::var("BREVO_CUSTOMERS_LIST_ID");
+    let api_key = env::var("BREVO_CUSTOMERS_WEBFLOW_API_KEY");
+    let master_email_address = env::var("BREVO_MASTER_EMAIL_ADDRESS");
+    let master_name = env::var("BREVO_MASTER_NAME");
+    let brevo_email_verification_template_id = env::var("BREVO_EMAIL_VERIFY_TEMPLATE_ID");
 
-    if email_verification {
+    if email_integration {
         if api_key.is_err() {
             warn!("BREVO_CUSTOMERS_WEBFLOW_API_KEY isn't set, skipping Brevo integration, including email verification");
         }
     
         if api_key.is_ok() && created_customer_list.is_err() {
-            warn!("BREVO_CUSTOMERS_LIST_ID isn't set, using default list");
+            env::set_var("BREVO_CUSTOMERS_LIST_ID", "1");
+            warn!("BREVO_CUSTOMERS_LIST_ID isn't set, using default list id: 1");
+        }
+
+        if master_email_address.is_err() {
+            env::set_var("BREVO_MASTER_EMAIL_ADDRESS", "test@example.com");
+            warn!("BREVO_MASTER_EMAIL_ADDRESS isn't set, using default email address: test@example.com");
+        }
+
+        if master_name.is_err() {
+            env::set_var("BREVO_MASTER_NAME", "My Example Company");
+            warn!("BREVO_MASTER_NAME isn't set, using default name: My Example Company");
+        }
+
+        if brevo_email_verification_template_id.is_err() {
+            env::set_var("BREVO_EMAIL_VERIFY_TEMPLATE_ID", "1");
+            warn!("BREVO_EMAIL_VERIFY_TEMPLATE_ID isn't set, using default template id: 1");
         }
     }
         

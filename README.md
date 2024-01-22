@@ -47,15 +47,19 @@ PRO_MONTHLY_VARIANT_ID=             # Not Sensitive Data (fly.toml)
 PRO_ANNUALLY_VARIANT_ID=            # Not Sensitive Data (fly.toml)
 
 ENABLE_EMAIL_VERIFICATION=          # Not Sensitive Data (fly.toml)
+
+BREVO_CUSTOMERS_WEBFLOW_API_KEY=    # fly secrets set 
 BREVO_CUSTOMERS_LIST_ID=            # Not Sensitive Data (fly.toml)
-BREVO_CUSTOMERS_WEBFLOW_API_KEY=    # fly secrets set BREVO_CUSTOMERS_WEBFLOW_API_KEY=
+BREVO_EMAIL_VERIFY_TEMPLATE_ID=     # Not Sensitive Data (fly.toml)
+
+BREVO_MASTER_EMAIL_ADDRESS=         # Not Sensitive Data (fly.toml)
+BREVO_MASTER_NAME=                  # Not Sensitive Data (fly.toml)
 ```
 
 # Future Ideas
 
 * Next.js template
 * auth reset token
-* email verification
 
 # Help
 
