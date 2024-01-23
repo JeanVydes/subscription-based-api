@@ -2,10 +2,7 @@ use crate::{
     utilities::helpers::fallback,
     types::lemonsqueezy::Products, 
     routers::{
-        identity::get_identity_router, 
-        customer_actions::get_customer_actions_router, 
-        customers::get_customers_router, 
-        webhooks::get_webhooks_router
+        customer_actions::get_customer_actions_router, customers::get_customers_router, identity::get_identity_router, public::get_public_router, webhooks::get_webhooks_router
     },
 };
 use axum::{
@@ -51,7 +48,7 @@ pub struct AppState {
 
     pub lemonsqueezy_webhook_signature_key: String,
     pub products: Products,
-    
+
     pub enabled_email_integration: bool,
     pub master_email_entity: MasterEmailEntity,
     pub email_provider_settings: EmailProviderSettings,
@@ -64,6 +61,8 @@ pub async fn init(mongodb_client: MongoClient, redis_connection: RedisClient, po
     // show products, for testing purposes
     info!("Products: {:?}", app_state.products);
 
+    // /api/public
+    let public = get_public_router(app_state.clone()).await;
     // /api/customers
     let customers = get_customers_router(app_state.clone()).await;
     info!("Customers router loaded");
@@ -78,6 +77,7 @@ pub async fn init(mongodb_client: MongoClient, redis_connection: RedisClient, po
     info!("Webhooks router loaded");
     // /api
     let api = Router::new()
+        .nest("/public", public)
         .nest("/customers", customers)
         .nest("/me", customers_actions)
         .nest("/identity", identity)

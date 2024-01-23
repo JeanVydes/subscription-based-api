@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str::FromStr;
 
+use super::subscription::PublicSubscription;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenericResponse {
     pub message: String,
@@ -51,6 +53,20 @@ pub struct Customer {
     // miscelaneous
     pub preferences: Preferences,
     pub subscription: Subscription,
+
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicCustomer {
+    pub id: String,
+    pub name: String,
+    pub class: CustomerType,
+    
+    pub preferences: Preferences,
+    pub subscription: PublicSubscription,
 
     pub created_at: String,
     pub updated_at: String,

@@ -1,8 +1,8 @@
 use axum::BoxError;
 use axum::error_handling::HandleErrorLayer;
 use axum::http::StatusCode;
-use axum::{Router, routing::{get, post}};
-use crate::controllers::identity::{request_credentials, get_session};
+use axum::{Router, routing::{get, post, patch}};
+use crate::controllers::identity::{get_session, renew_session, request_credentials};
 
 use crate::server::AppState;
 use std::{sync::Arc, time::Duration};
@@ -24,6 +24,13 @@ pub async fn get_identity_router(app_state: Arc<AppState>) -> Router<Arc<AppStat
             get({
                 let app_state = Arc::clone(&app_state);
                 move |headers| get_session(headers, app_state)
+            }),
+        )
+        .route(
+            "/session",
+            patch({
+                let app_state = Arc::clone(&app_state);
+                move |headers| renew_session(headers, app_state)
             }),
         )
         .layer(

@@ -1,4 +1,4 @@
-use crate::utilities::api_messages::{APIMessages, EmailMessages, RedisMessages, TokenMessages};
+use crate::utilities::api_messages::{APIMessages, CustomerMessages, EmailMessages, RedisMessages, TokenMessages};
 use crate::utilities::helpers::payload_analyzer;
 use crate::server::AppState;
 use crate::storage::mongo::{build_customer_filter, find_customer, update_customer};
@@ -129,7 +129,7 @@ pub async fn request_credentials(
         return (
             StatusCode::BAD_REQUEST,
             Json(GenericResponse {
-                message: String::from("invalid email"),
+                message: APIMessages::Email(EmailMessages::Invalid).to_string(),
                 data: json!({}),
                 exited_code: 1,
             }),
@@ -146,7 +146,7 @@ pub async fn request_credentials(
         return (
             StatusCode::NOT_FOUND,
             Json(GenericResponse {
-                message: String::from("email not associated with any customer"),
+                message: APIMessages::Customer(CustomerMessages::NotFound).to_string(),
                 data: json!({}),
                 exited_code: 0,
             }),
@@ -160,7 +160,7 @@ pub async fn request_credentials(
                 return (
                     StatusCode::UNAUTHORIZED,
                     Json(GenericResponse {
-                        message: String::from("unauthorized"),
+                        message: APIMessages::Unauthorized.to_string(),
                         data: json!({}),
                         exited_code: 0,
                     }),
@@ -171,7 +171,7 @@ pub async fn request_credentials(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: String::from("error verifying password"),
+                    message: APIMessages::InternalServerError.to_string(),
                     data: json!({}),
                     exited_code: 0,
                 }),
@@ -185,7 +185,7 @@ pub async fn request_credentials(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: String::from("error creating token"),
+                    message: APIMessages::Token(TokenMessages::ErrorCreating).to_string(),
                     data: json!({}),
                     exited_code: 0,
                 }),
@@ -199,7 +199,7 @@ pub async fn request_credentials(
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: String::from("error connecting to redis"),
+                    message: APIMessages::Redis(RedisMessages::FailedToConnect).to_string(),
                     data: json!({}),
                     exited_code: 0,
                 }),
@@ -209,15 +209,15 @@ pub async fn request_credentials(
 
     let result: Result<bool, RedisError> =
         redis_conn
-            .set_ex(token.clone(), &customer.id, 86400);
+            .set_ex(token.clone(), &customer.id, 604800);
 
     match result {
         Ok(_) => (),
-        Err(err) => {
+        Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: format!("error caching session: {}", err),
+                    message: APIMessages::Redis(RedisMessages::ErrorSettingKey).to_string(),
                     data: json!({}),
                     exited_code: 0,
                 }),
@@ -228,10 +228,86 @@ pub async fn request_credentials(
     return (
         StatusCode::OK,
         Json(GenericResponse {
-            message: String::from("authorized"),
+            message: APIMessages::Token(TokenMessages::Created).to_string(),
             data: json!({
                 "token": token,
             }),
+            exited_code: 0,
+        }),
+    );
+}
+
+pub async fn renew_session(
+    headers: HeaderMap,
+    state: Arc<AppState>,
+) -> (StatusCode, Json<GenericResponse>) {
+    let token_string = match extract_token_string(&headers) {
+        Ok(token_string) => token_string,
+        Err((status_code, json)) => return (status_code, json),
+    };
+
+    let mut redis_conn = match state.redis_connection.get_connection() {
+        Ok(redis_conn) => redis_conn,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: APIMessages::Redis(RedisMessages::FailedToConnect).to_string(),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    let customer_id: String = match redis_conn.get(token_string.to_string()) {
+        Ok(customer_id) => customer_id,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: APIMessages::Redis(RedisMessages::ErrorFetching).to_string(),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    if customer_id.is_empty() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(GenericResponse {
+                message: APIMessages::Token(TokenMessages::Expired).to_string(),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        );
+    }
+
+    let result: Result<bool, RedisError> =
+        redis_conn
+            .set_ex(token_string.to_string(), customer_id, 604800);
+
+    match result {
+        Ok(_) => (),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: APIMessages::Token(TokenMessages::ErrorRenewing).to_string(),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    return (
+        StatusCode::OK,
+        Json(GenericResponse {
+            message: APIMessages::Token(TokenMessages::Renewed).to_string(),
+            data: json!({}),
             exited_code: 0,
         }),
     );

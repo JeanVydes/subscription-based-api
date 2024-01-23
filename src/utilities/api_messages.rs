@@ -29,9 +29,12 @@ pub enum APIMessages{
 pub enum TokenMessages {
     Missing,
     NotSigningKeyFound,
+    Created,
     ErrorCreating,
     Expired,
     ErrorValidating,
+    Renewed,
+    ErrorRenewing,
 }
 
 #[derive(Debug)]
@@ -47,6 +50,7 @@ pub enum InputMessages {
 #[derive(Debug)]
 pub enum CustomerMessages {
     Created,
+    Found,
     NotFound,
     NotAcceptedTerms,
     
@@ -62,6 +66,8 @@ pub enum CustomerMessages {
     NameUpdated,
     PasswordUpdated,
     EmailAdded,
+
+    NotFoundByID,
 }
 
 #[derive(Debug)]
@@ -119,9 +125,12 @@ impl ToString for TokenMessages {
         match self {
             TokenMessages::Missing => "token.missing".to_string(),
             TokenMessages::NotSigningKeyFound => "token.not_signing_key_found".to_string(),
+            TokenMessages::Created => "token.created".to_string(),
             TokenMessages::ErrorCreating => "token.error_creating".to_string(),
             TokenMessages::Expired => "token.expired".to_string(),
             TokenMessages::ErrorValidating => "token.error_validating".to_string(),
+            TokenMessages::Renewed => "token.renewed".to_string(),
+            TokenMessages::ErrorRenewing => "token.error_renewing".to_string(),
         }
     }
 }
@@ -149,6 +158,7 @@ impl ToString for CustomerMessages {
     fn to_string(&self) -> String {
         match self {
             CustomerMessages::Created => "customer.created".to_string(),
+            CustomerMessages::Found => "customer.found".to_string(),
             CustomerMessages::NotFound => "customer.not_found".to_string(),
             CustomerMessages::NotAcceptedTerms => "customer.not_accepted_terms".to_string(),
             CustomerMessages::PasswordConfirmationDoesNotMatch => {
@@ -164,6 +174,7 @@ impl ToString for CustomerMessages {
             CustomerMessages::PasswordUpdated => "customer.password_updated".to_string(),
             CustomerMessages::EmailAdded => "customer.email_added".to_string(),
             CustomerMessages::InvalidType => "customer.invalid_type".to_string(),
+            CustomerMessages::NotFoundByID => "customer.not_found_by_id".to_string(),
         }
     }
 }

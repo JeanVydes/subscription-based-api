@@ -3,15 +3,17 @@ use crate::types::email::SendEmailData;
 use crate::utilities::api_messages::{APIMessages, CustomerMessages, EmailMessages, InputMessages, MongoMessages, RedisMessages};
 use crate::utilities::helpers::{payload_analyzer, random_string, valid_password, valid_email, parse_class};
 use crate::storage::mongo::{build_customer_filter, find_customer, update_customer};
-use crate::types::customer::{Customer, Email, Preferences};
+use crate::types::customer::{Customer, Email, Preferences, PublicCustomer};
 use crate::types::incoming_requests::{CreateCustomerRecord, CustomerUpdateName, CustomerUpdatePassword, CustomerAddEmail};
-use crate::types::subscription::{Slug, Subscription, SubscriptionFrequencyClass};
+use crate::types::subscription::{PublicSubscription, Slug, Subscription, SubscriptionFrequencyClass};
 use crate::{server::AppState, types::customer::GenericResponse};
 
+use axum::extract::Query;
 use axum::http::HeaderMap;
 use axum::{extract::rejection::JsonRejection, http::StatusCode, Json};
 use chrono::Utc;
 use mongodb::bson::doc;
+use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -274,6 +276,76 @@ pub async fn create_customer_record(
         Json(GenericResponse {
             message: APIMessages::Customer(CustomerMessages::Created).to_string(),
             data: json!(customer),
+            exited_code: 0,
+        }),
+    )
+}
+
+
+#[derive(Debug, Deserialize)]
+pub struct FetchCustomerByID {
+    pub id: Option<String>,
+}
+
+pub async fn fetch_public_customer_record_by_id(
+    Query(params): Query<FetchCustomerByID>,
+    state: Arc<AppState>,
+) -> (StatusCode, Json<GenericResponse>) {
+    let customer_id = match params.id {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(GenericResponse {
+                    message: APIMessages::Customer(CustomerMessages::NotFoundByID).to_string(),
+                    data: json!({}),
+                    exited_code: 1,
+                }),
+            )
+        }
+    };
+
+    let filter = build_customer_filter(customer_id.as_str(), "").await;
+    let (found, customer) = match find_customer(&state.mongo_db, filter).await {
+        Ok(customer) => customer,
+        Err((status, json)) => return (status, json)
+    };
+
+    if !found {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(GenericResponse {
+                message: APIMessages::Customer(CustomerMessages::NotFound).to_string(),
+                data: json!({}),
+                exited_code: 1,
+            }),
+        );
+    }
+
+    let customer = customer.unwrap();
+    let public_subscription = PublicSubscription {
+        id: customer.subscription.id,
+        slug: customer.subscription.slug,
+        frequency: customer.subscription.frequency,
+        status: customer.subscription.status,
+    };
+
+    let public_customer = PublicCustomer {
+        id: customer.id,
+        name: customer.name,
+        class: customer.class,
+        preferences: customer.preferences,
+        subscription: public_subscription,
+        created_at: customer.created_at,
+        updated_at: customer.updated_at,
+        deleted: customer.deleted,
+    };
+
+    (
+        StatusCode::OK,
+        Json(GenericResponse {
+            message: APIMessages::Customer(CustomerMessages::Found).to_string(),
+            data: json!(public_customer),
             exited_code: 0,
         }),
     )
