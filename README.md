@@ -11,6 +11,7 @@ also i create a postman api reference, you have to replicate that in your fronte
 # Features
 
 * Accounts System
+* OAuth using Google
 * Login System Based In Session Tokens
 * Database Connection with Postgres (misc) using Diesel as ORM, MongoDB (for users) and Redis (for sessions)
 * LemonSqueezy Subscription Totally Integration
@@ -63,7 +64,7 @@ GOOGLE_OAUTH_CLIENT_REDIRECT_ENDPOINT=   # Not Sensitive Data (fly.toml)
 # Future Ideas
 
 * Next.js template
-* auth reset token
+* OAuth with Apple
 
 # Help
 
