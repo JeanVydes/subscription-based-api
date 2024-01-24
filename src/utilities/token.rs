@@ -12,9 +12,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::controllers::identity::SessionScopes;
 use crate::types::customer::GenericResponse;
 
-use super::api_messages::{APIMessages, TokenMessages};
+use super::api_messages::{APIMessages, RedisMessages, TokenMessages};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -23,11 +24,32 @@ pub struct Claims {
     pub exp: usize,
 }
 
-pub fn create_token(id: &String) -> Result<std::string::String, String> {
+pub fn scopes_to_string(scopes: Vec<SessionScopes>) -> String {
+    let sanitized_scopes = scopes
+        .iter()
+        .map(|scope| scope.to_string())
+        .collect::<Vec<String>>();
+
+    sanitized_scopes.join(",")
+}
+
+pub fn string_to_scopes(scopes: String) -> Vec<SessionScopes> {
+    let sanitized_scopes = scopes
+        .split(",")
+        .map(|scope| scope.parse::<SessionScopes>().unwrap())
+        .collect::<Vec<SessionScopes>>();
+
+    sanitized_scopes
+}
+
+pub fn create_token(id: &String, scopes: Vec<SessionScopes>) -> Result<std::string::String, String> {
     let expiration_time = env::var("API_TOKENS_EXPIRATION_TIME").unwrap_or(String::from("86400"));
     let header = Header::new(Algorithm::HS512);
+
+    let sanitized_scopes = scopes_to_string(scopes);
+
     let claims = Claims {
-        aud: String::from("myself"),
+        aud: sanitized_scopes,
         sub: id.to_string(),
         exp: SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -51,7 +73,7 @@ pub fn create_token(id: &String) -> Result<std::string::String, String> {
     }
 }
 
-pub fn validate_token(token: &str) -> Result<TokenData<Claims>, String> {
+pub fn get_token_payload(token: &str) -> Result<TokenData<Claims>, String> {
     let validation = Validation::new(Algorithm::HS512);
 
     let signing_key = match env::var("API_TOKENS_SIGNING_KEY") {
@@ -67,6 +89,12 @@ pub fn validate_token(token: &str) -> Result<TokenData<Claims>, String> {
         Ok(t) => t,
         Err(_) => return Err(APIMessages::Token(TokenMessages::ErrorValidating).to_string()),
     };
+
+    Ok(token_data)
+}
+
+pub fn validate_token(token: &str) -> Result<TokenData<Claims>, String> {
+    let token_data = get_token_payload(token)?;
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
@@ -85,10 +113,10 @@ pub async fn get_session_from_redis(
 
     match result {
         Ok(id) => Ok(id),
-        Err(err) => Err((
+        Err(_) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(GenericResponse {
-                message: format!("error getting session: {}", err),
+                message: APIMessages::Redis(RedisMessages::ErrorFetching).to_string(),
                 data: json!({}),
                 exited_code: 0,
             }),
@@ -103,7 +131,7 @@ pub async fn extract_token_from_headers(headers: &HeaderMap) -> Result<&str, (St
             Err(_) => Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(GenericResponse {
-                    message: String::from("error parsing token"),
+                    message: APIMessages::Token(TokenMessages::ErrorParsingToken).to_string(),
                     data: json!({}),
                     exited_code: 0,
                 }),
@@ -112,7 +140,7 @@ pub async fn extract_token_from_headers(headers: &HeaderMap) -> Result<&str, (St
         None => Err((
             StatusCode::UNAUTHORIZED,
             Json(GenericResponse {
-                message: String::from("unauthorized"),
+                message: APIMessages::Token(TokenMessages::NotAuthorizationHeader).to_string(),
                 data: json!({}),
                 exited_code: 0,
             }),

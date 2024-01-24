@@ -21,7 +21,7 @@ use redis::{Commands, RedisError};
 
 use bcrypt::{hash, DEFAULT_COST, verify};
 
-use super::identity::get_user_session_from_req;
+use super::identity::{get_user_session_from_req, SessionScopes};
 
 pub async fn create_customer_record(
     payload_result: Result<Json<CreateCustomerRecord>, JsonRejection>,
@@ -367,10 +367,21 @@ pub async fn update_name(
     payload_result: Result<Json<CustomerUpdateName>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
-    let customer_id = match get_user_session_from_req(headers, &state.redis_connection).await {
+    let session_data = match get_user_session_from_req(headers, &state.redis_connection).await {
         Ok(customer_id) => customer_id,
         Err((status_code, json)) => return (status_code, json),
     };
+
+    if !session_data.scopes.contains(&SessionScopes::ReadWrite) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(GenericResponse {
+                message: APIMessages::Token(TokenMessages::NotAllowedScopesToPerformAction).to_string(),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        );
+    }
 
     let payload = match payload_analyzer(payload_result) {
         Ok(payload) => payload,
@@ -391,7 +402,7 @@ pub async fn update_name(
     let current_datetime = Utc::now();
     let iso8601_string = current_datetime.to_rfc3339();
 
-    let filter = build_customer_filter(customer_id.as_str(), "").await;
+    let filter = build_customer_filter(session_data.customer_id.as_str(), "").await;
     let update = doc! {"$set": {
             "name": &payload.name,
             "updated_at": iso8601_string,
@@ -416,12 +427,23 @@ pub async fn update_password(
     payload_result: Result<Json<CustomerUpdatePassword>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
-    let customer_id = match get_user_session_from_req(headers, &state.redis_connection).await {
+    let session_data = match get_user_session_from_req(headers, &state.redis_connection).await {
         Ok(customer_id) => customer_id,
         Err((status_code, json)) => return (status_code, json),
     };
 
-    let filter = build_customer_filter(customer_id.as_str(), "").await;
+    if !session_data.scopes.contains(&SessionScopes::ReadWrite) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(GenericResponse {
+                message: APIMessages::Token(TokenMessages::NotAllowedScopesToPerformAction).to_string(),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        );
+    }
+
+    let filter = build_customer_filter(session_data.customer_id.as_str(), "").await;
     let (found, customer) = match find_customer(&state.mongo_db, filter).await {
         Ok(customer) => customer,
         Err((status, json)) => return (status, json)
@@ -535,7 +557,7 @@ pub async fn update_password(
     let current_datetime = Utc::now();
     let iso8601_string = current_datetime.to_rfc3339();
 
-    let filter = build_customer_filter(customer_id.as_str(), "").await;
+    let filter = build_customer_filter(session_data.customer_id.as_str(), "").await;
     let update = doc! {"$set": {
             "password": hashed_new_password,
             "updated_at": iso8601_string,
@@ -560,17 +582,28 @@ pub async fn add_email(
     payload_result: Result<Json<CustomerAddEmail>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
+    let session_data = match get_user_session_from_req(headers, &state.redis_connection).await {
+        Ok(customer_id) => customer_id,
+        Err((status_code, json)) => return (status_code, json),
+    };
+
+    if !session_data.scopes.contains(&SessionScopes::ReadWrite) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(GenericResponse {
+                message: APIMessages::Token(TokenMessages::NotAllowedScopesToPerformAction).to_string(),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        );
+    }
+
     let payload = match payload_analyzer(payload_result) {
         Ok(payload) => payload,
         Err((status_code, json)) => return (status_code, json),
     };
 
-    let customer_id = match get_user_session_from_req(headers, &state.redis_connection).await {
-        Ok(customer_id) => customer_id,
-        Err((status_code, json)) => return (status_code, json),
-    };
-
-    let filter = build_customer_filter(customer_id.as_str(), "").await;
+    let filter = build_customer_filter(session_data.customer_id.as_str(), "").await;
     let (found, customer) = match find_customer(&state.mongo_db, filter).await {
         Ok(customer) => customer,
         Err((status, json)) => return (status, json)
@@ -667,7 +700,7 @@ pub async fn add_email(
     let current_datetime = Utc::now();
     let iso8601_string = current_datetime.to_rfc3339();
 
-    let filter = build_customer_filter(customer_id.as_str(), "").await;
+    let filter = build_customer_filter(session_data.customer_id.as_str(), "").await;
     let update = doc! {"$set": {
             "emails": &bson_emails,
             "updated_at": iso8601_string,

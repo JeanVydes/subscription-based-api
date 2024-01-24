@@ -36,12 +36,16 @@ pub enum TokenMessages {
     Renewed,
     ErrorRenewing,
 
+    NotAllowedScopesToPerformAction,
 
     OnlyLegacyProvider,
     OnlyGoogleProvider,
 
     ErrorFetchingUserFromGoogle,
     ErrorRequestingGoogleToken,
+
+    NotAuthorizationHeader,
+    ErrorParsingToken,
 }
 
 #[derive(Debug)]
@@ -142,6 +146,9 @@ impl ToString for TokenMessages {
             TokenMessages::OnlyGoogleProvider => "token.only_google_provider".to_string(),
             TokenMessages::ErrorFetchingUserFromGoogle => "token.error_fetching_user_from_google".to_string(),
             TokenMessages::ErrorRequestingGoogleToken => "token.error_requesting_google_token".to_string(),
+            TokenMessages::NotAuthorizationHeader => "token.not_authorization_header".to_string(),
+            TokenMessages::ErrorParsingToken => "token.error_parsing_token".to_string(),
+            TokenMessages::NotAllowedScopesToPerformAction => "token.not_allowed_scopes_to_perform_action".to_string(),
         }
     }
 }

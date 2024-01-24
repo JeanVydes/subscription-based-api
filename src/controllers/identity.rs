@@ -3,7 +3,7 @@ use crate::utilities::api_messages::{APIMessages, CustomerMessages, EmailMessage
 use crate::utilities::helpers::payload_analyzer;
 use crate::server::AppState;
 use crate::storage::mongo::{build_customer_filter, find_customer};
-use crate::utilities::token::{create_token, extract_token_from_headers, get_session_from_redis, validate_token};
+use crate::utilities::token::{create_token, extract_token_from_headers, get_session_from_redis, get_token_payload, string_to_scopes, validate_token};
 use crate::types::customer::{AuthProviders, GenericResponse};
 use crate::types::incoming_requests::SignIn;
 
@@ -14,17 +14,58 @@ use axum::{
     http::StatusCode, Json
 };
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use std::string;
 use std::sync::Arc;
 
 use bcrypt::verify;
 use redis::{Client, Commands, RedisError};
 use serde_json::json;
 
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub enum SessionScopes {
+    PublicRead,
+    SensitiveRead,
+    Write,
+    ReadWrite,
+}
+
+impl ToString for SessionScopes {
+    fn to_string(&self) -> String {
+        match self {
+            SessionScopes::PublicRead => "public_read".to_string(),
+            SessionScopes::SensitiveRead => "sensitive_read".to_string(),
+            SessionScopes::Write => "write".to_string(),
+            SessionScopes::ReadWrite => "read_write".to_string(),
+        }
+    }
+}
+
+impl FromStr for SessionScopes {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<SessionScopes, Self::Err> {
+        match input {
+            "public_read" => Ok(SessionScopes::PublicRead),
+            "sensitive_read" => Ok(SessionScopes::SensitiveRead),
+            "write" => Ok(SessionScopes::Write),
+            "read_write" => Ok(SessionScopes::ReadWrite),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SessionData {
+    pub customer_id: String,
+    pub scopes: Vec<SessionScopes>,
+}
+
 pub async fn get_user_session_from_req(
     headers: HeaderMap,
     redis_connection: &Client,
-) -> Result<String, (StatusCode, Json<GenericResponse>)> {
+) -> Result<SessionData, (StatusCode, Json<GenericResponse>)> {
     let token_string = extract_token_from_headers(&headers).await?;
     let _ = match validate_token(token_string) {
         Ok(_) => Ok(()),
@@ -37,19 +78,46 @@ pub async fn get_user_session_from_req(
             }),
         )),
     };
-    get_session_from_redis(redis_connection, &token_string).await
+    let customer_id = match get_session_from_redis(redis_connection, &token_string).await {
+        Ok(token) => token,
+        Err((status_code, json)) => return Err((status_code, json)),
+    };
+    
+    let token_data = match get_token_payload(&token_string) {
+        Ok(token_data) => token_data,
+        Err(_) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: APIMessages::Token(TokenMessages::ErrorParsingToken).to_string(),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            ))
+        }
+    };
+
+    let raw_scopes = token_data.claims.aud;
+    let scopes: Vec<SessionScopes> = string_to_scopes(raw_scopes);
+    
+    let session_data = SessionData {
+        customer_id,
+        scopes,
+    };
+
+    return Ok(session_data);
 }
 
 pub async fn get_session(
     headers: HeaderMap,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
-    let id = match get_user_session_from_req(headers, &state.redis_connection).await {
+    let session_data = match get_user_session_from_req(headers, &state.redis_connection).await {
         Ok(id) => id,
         Err((status_code, json)) => return (status_code, json)
     };
 
-    if id.is_empty() {
+    if session_data.customer_id.is_empty() {
         return (
             StatusCode::UNAUTHORIZED,
             Json(GenericResponse {
@@ -65,7 +133,7 @@ pub async fn get_session(
         Json(GenericResponse {
             message: String::from("authorized"),
             data: json!({
-                "customer_id": id,
+                "customer_id": session_data.customer_id,
             }),
             exited_code: 0,
         }),
@@ -235,7 +303,7 @@ pub async fn legacy_authentication(
         );
     }
 
-    let token = match create_token(&customer.id) {
+    let token = match create_token(&customer.id, vec![SessionScopes::ReadWrite]) {
         Ok(token) => token,
         Err(_) => {
             return (
@@ -414,7 +482,7 @@ pub async fn gooogle_authentication(
         );
     }
 
-    let token = match create_token(&customer.id) {
+    let token = match create_token(&customer.id, vec![SessionScopes::ReadWrite]) {
         Ok(token) => token,
         Err(_) => {
             return (
