@@ -4,7 +4,7 @@ use axum::extract::rejection::JsonRejection;
 use axum::http::{StatusCode, HeaderMap};
 use axum::{Router, routing::{get, patch}};
 use crate::controllers::customer::{update_name, update_password, add_email};
-use crate::controllers::identity::verify_email;
+use crate::controllers::customer::verify_email;
 use crate::server::AppState;
 use crate::types::incoming_requests::{CustomerUpdateName, CustomerUpdatePassword, CustomerAddEmail};
 use std::{sync::Arc, time::Duration};

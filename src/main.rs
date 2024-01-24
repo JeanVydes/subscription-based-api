@@ -7,6 +7,7 @@ mod types;
 mod utilities;
 mod routers;
 mod email;
+mod oauth;
 
 use std::env;
 use chrono::Local;
@@ -128,6 +129,10 @@ async fn load_env() -> String {
             warn!("BREVO_EMAIL_VERIFY_TEMPLATE_ID isn't set, using default template id: 1");
         }
     }
+
+    env::var("GOOGLE_OAUTH_CLIENT_ID").expect("GOOGLE_OAUTH_CLIENT_ID must be set");
+    env::var("GOOGLE_OAUTH_CLIENT_SECRET").expect("GOOGLE_OAUTH_CLIENT_SECRET must be set");
+    env::var("GOOGLE_OAUTH_CLIENT_REDIRECT_ENDPOINT").expect("GOOGLE_CLIENT_OAUTH_REDIRECT_URL must be set");
         
     let expiration_time = match env::var("API_TOKENS_EXPIRATION_TIME") {
         Ok(expiration_time) => expiration_time,

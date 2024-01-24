@@ -36,6 +36,14 @@ pub struct EmailProviderSettings {
 }
 
 #[derive(Clone)]
+pub struct GoogleAuth {
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
+}
+
+
+#[derive(Clone)]
 pub struct AppState {
     pub api_url: String,
     pub api_tokens_expiration_time: i64,
@@ -53,6 +61,7 @@ pub struct AppState {
     pub master_email_entity: MasterEmailEntity,
     pub email_provider_settings: EmailProviderSettings,
 
+    pub google_auth: GoogleAuth,
 }
 
 pub async fn init(mongodb_client: MongoClient, redis_connection: RedisClient, postgres_conn: Option<Pool<ConnectionManager<PgConnection>>>) {
@@ -199,6 +208,25 @@ pub async fn set_app_state(mongodb_client: MongoClient, redis_connection: RedisC
         email_verification_template_id,
     };
 
+    let google_oauth_redirect_endpoints = match env::var("GOOGLE_OAUTH_CLIENT_REDIRECT_ENDPOINT") {
+        Ok(url) => url,
+        Err(_) => panic!("GOOGLE_OAUTH_CLIENT_REDIRECT_ENDPOINT not found"),
+    };
+
+    let google_oauth_redirect_url = format!("https://{}{}", api_url, google_oauth_redirect_endpoints);
+
+    let google_auth = GoogleAuth {
+        client_id: match env::var("GOOGLE_OAUTH_CLIENT_ID") {
+            Ok(id) => id,
+            Err(_) => panic!(" GOOGLE_OAUTH_CLIENT_ID not found"),
+        },
+        client_secret: match env::var("GOOGLE_OAUTH_CLIENT_SECRET") {
+            Ok(secret) => secret,
+            Err(_) => panic!("GOOGLE_OAUTH_CLIENT_SECRET not found"),
+        },
+        redirect_url: google_oauth_redirect_url,
+    };
+
     let app_state = Arc::new(AppState {
         mongodb_client,
         redis_connection,
@@ -211,6 +239,7 @@ pub async fn set_app_state(mongodb_client: MongoClient, redis_connection: RedisC
         api_url,
         master_email_entity,
         email_provider_settings,
+        google_auth,
     });
 
     return app_state;

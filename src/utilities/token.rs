@@ -1,11 +1,18 @@
+use axum::http::HeaderMap;
+use axum::{http::StatusCode, Json};
 use jsonwebtoken::{
     decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation,
 };
+use redis::Commands;
+use redis::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::{
     env,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+use crate::types::customer::GenericResponse;
 
 use super::api_messages::{APIMessages, TokenMessages};
 
@@ -68,4 +75,47 @@ pub fn validate_token(token: &str) -> Result<TokenData<Claims>, String> {
     }
 
     Ok(token_data)
+}
+
+pub async fn get_session_from_redis(
+    redis_connection: &Client,
+    token_string: &str,
+) -> Result<String, (StatusCode, Json<GenericResponse>)> {
+    let result = redis_connection.clone().get::<String, String>(token_string.to_string());
+
+    match result {
+        Ok(id) => Ok(id),
+        Err(err) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(GenericResponse {
+                message: format!("error getting session: {}", err),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        )),
+    }
+}
+
+pub async fn extract_token_from_headers(headers: &HeaderMap) -> Result<&str, (StatusCode, Json<GenericResponse>)> {
+    match headers.get("Authorization") {
+        Some(token) => match token.to_str() {
+            Ok(token) => Ok(token),
+            Err(_) => Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: String::from("error parsing token"),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )),
+        },
+        None => Err((
+            StatusCode::UNAUTHORIZED,
+            Json(GenericResponse {
+                message: String::from("unauthorized"),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        )),
+    }
 }

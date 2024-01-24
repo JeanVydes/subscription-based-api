@@ -14,6 +14,7 @@ pub struct CreateCustomerRecord {
     pub password_confirmation: String,
     pub class: String,
     pub accepted_terms: bool,
+    pub provider: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

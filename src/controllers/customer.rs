@@ -1,9 +1,9 @@
 use crate::email::actions::{send_create_contact_request, send_verification_email};
 use crate::types::email::SendEmailData;
-use crate::utilities::api_messages::{APIMessages, CustomerMessages, EmailMessages, InputMessages, MongoMessages, RedisMessages};
+use crate::utilities::api_messages::{APIMessages, CustomerMessages, EmailMessages, InputMessages, MongoMessages, RedisMessages, TokenMessages};
 use crate::utilities::helpers::{payload_analyzer, random_string, valid_password, valid_email, parse_class};
 use crate::storage::mongo::{build_customer_filter, find_customer, update_customer};
-use crate::types::customer::{Customer, Email, Preferences, PublicCustomer};
+use crate::types::customer::{AuthProviders, Customer, Email, Preferences, PublicCustomer};
 use crate::types::incoming_requests::{CreateCustomerRecord, CustomerUpdateName, CustomerUpdatePassword, CustomerAddEmail};
 use crate::types::subscription::{PublicSubscription, Slug, Subscription, SubscriptionFrequencyClass};
 use crate::{server::AppState, types::customer::GenericResponse};
@@ -21,7 +21,7 @@ use redis::{Commands, RedisError};
 
 use bcrypt::{hash, DEFAULT_COST, verify};
 
-use super::identity::get_user_id_from_req;
+use super::identity::get_user_session_from_req;
 
 pub async fn create_customer_record(
     payload_result: Result<Json<CreateCustomerRecord>, JsonRejection>,
@@ -43,6 +43,13 @@ pub async fn create_customer_record(
         );
     }
 
+    let auth_provider: AuthProviders;
+    match payload.provider.to_lowercase().as_str() {
+        "legacy" => auth_provider = AuthProviders::LEGACY,
+        "google" => auth_provider = AuthProviders::GOOGLE,
+        _ => auth_provider = AuthProviders::LEGACY,
+    }
+
     if payload.name.len() < 2 || payload.name.len() > 25 {
         return (
             StatusCode::BAD_REQUEST,
@@ -59,31 +66,49 @@ pub async fn create_customer_record(
         Err((status_code, json)) => return (status_code, json),
     };
 
-    match valid_password(&payload.password).await {
-        Ok(_) => (),
-        Err((status_code, json)) => return (status_code, json),
-    };
+    let mut hashed_password = "".to_string();
+    if auth_provider == AuthProviders::LEGACY {
+        match valid_password(&payload.password).await {
+            Ok(_) => (),
+            Err((status_code, json)) => return (status_code, json),
+        };
 
-    if payload.password != payload.password_confirmation {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(GenericResponse {
-                message: APIMessages::Customer(CustomerMessages::PasswordConfirmationDoesNotMatch).to_string(),
-                data: json!({}),
-                exited_code: 1,
-            }),
-        );
-    }
+        if payload.password != payload.password_confirmation {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(GenericResponse {
+                    message: APIMessages::Customer(CustomerMessages::PasswordConfirmationDoesNotMatch).to_string(),
+                    data: json!({}),
+                    exited_code: 1,
+                }),
+            );
+        }
+    
 
-    if payload.email.to_lowercase() == payload.password.to_lowercase() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(GenericResponse {
-                message: APIMessages::Email(EmailMessages::EmailAndPasswordMustBeDifferent).to_string(),
-                data: json!({}),
-                exited_code: 1,
-            }),
-        );
+        if payload.email.to_lowercase() == payload.password.to_lowercase() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(GenericResponse {
+                    message: APIMessages::Email(EmailMessages::EmailAndPasswordMustBeDifferent).to_string(),
+                    data: json!({}),
+                    exited_code: 1,
+                }),
+            );
+        }
+
+        hashed_password = match hash(&payload.password, DEFAULT_COST) {
+            Ok(hashed_password) => hashed_password,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(GenericResponse {
+                        message: APIMessages::Customer(CustomerMessages::ErrorHashingPassword).to_string(),
+                        data: json!({}),
+                        exited_code: 1,
+                    }),
+                )
+            }
+        };    
     }
 
     let filter = build_customer_filter("", payload.email.to_lowercase().as_str()).await;
@@ -102,20 +127,6 @@ pub async fn create_customer_record(
             }),
         );
     }
-
-    let hashed_password = match hash(&payload.password, DEFAULT_COST) {
-        Ok(hashed_password) => hashed_password,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(GenericResponse {
-                    message: APIMessages::Customer(CustomerMessages::ErrorHashingPassword).to_string(),
-                    data: json!({}),
-                    exited_code: 1,
-                }),
-            )
-        }
-    };
 
     let emails = vec![Email {
         address: payload.email.to_lowercase(),
@@ -152,6 +163,7 @@ pub async fn create_customer_record(
         name: payload.name.clone(),
         class,
         emails,
+        auth_provider,
 
         password: hashed_password,
         backup_security_codes: vec![],
@@ -281,7 +293,6 @@ pub async fn create_customer_record(
     )
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct FetchCustomerByID {
     pub id: Option<String>,
@@ -356,7 +367,7 @@ pub async fn update_name(
     payload_result: Result<Json<CustomerUpdateName>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
-    let customer_id = match get_user_id_from_req(headers, &state.redis_connection).await {
+    let customer_id = match get_user_session_from_req(headers, &state.redis_connection).await {
         Ok(customer_id) => customer_id,
         Err((status_code, json)) => return (status_code, json),
     };
@@ -405,7 +416,7 @@ pub async fn update_password(
     payload_result: Result<Json<CustomerUpdatePassword>, JsonRejection>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
-    let customer_id = match get_user_id_from_req(headers, &state.redis_connection).await {
+    let customer_id = match get_user_session_from_req(headers, &state.redis_connection).await {
         Ok(customer_id) => customer_id,
         Err((status_code, json)) => return (status_code, json),
     };
@@ -554,7 +565,7 @@ pub async fn add_email(
         Err((status_code, json)) => return (status_code, json),
     };
 
-    let customer_id = match get_user_id_from_req(headers, &state.redis_connection).await {
+    let customer_id = match get_user_session_from_req(headers, &state.redis_connection).await {
         Ok(customer_id) => customer_id,
         Err((status_code, json)) => return (status_code, json),
     };
@@ -674,4 +685,106 @@ pub async fn add_email(
         ),
         Err((status, json)) => return (status, json)
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VerifyEmailQueryParams {
+    pub token: Option<String>,
+}
+
+pub async fn verify_email(
+    Query(params): Query<VerifyEmailQueryParams>,
+    state: Arc<AppState>,
+) -> (StatusCode, Json<GenericResponse>) {
+    let token = match params.token {
+        Some(token) => token,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(GenericResponse {
+                    message: APIMessages::Token(TokenMessages::Missing).to_string(),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    let mut redis_conn = match state.redis_connection.get_connection() {
+        Ok(redis_conn) => redis_conn,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: APIMessages::Redis(RedisMessages::FailedToConnect).to_string(),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    let customer_email_address: String = match redis_conn.get(token.clone()) {
+        Ok(customer_email_address) => customer_email_address,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: APIMessages::Redis(RedisMessages::ErrorFetching).to_string(),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    if customer_email_address.is_empty() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(GenericResponse {
+                message: APIMessages::Unauthorized.to_string(),
+                data: json!({}),
+                exited_code: 0,
+            }),
+        );
+    }
+
+    let filter = doc! {
+        "emails.address": customer_email_address,
+    };
+    
+    let update = doc! {
+        "$set": {
+            "emails.$.verified": true,
+        }
+    };
+
+    match update_customer(&state.mongo_db, filter, update).await {
+        Ok(_) => (),
+        Err((status, json)) => return (status, json)
+    };
+
+    let result: Result<bool, RedisError> = redis_conn.del(token.clone());
+    match result {
+        Ok(_) => (),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(GenericResponse {
+                    message: APIMessages::Redis(RedisMessages::ErrorDeleting).to_string(),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(GenericResponse {
+            message: APIMessages::Email(EmailMessages::Verified).to_string(),
+            data: json!({}),
+            exited_code: 0,
+        }),
+    )
 }

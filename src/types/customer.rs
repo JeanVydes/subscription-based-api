@@ -19,11 +19,21 @@ pub struct Email {
     pub main: bool,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CustomerType {
     PERSONAL,
     MANAGER,
     DEVELOPER,
+}
+
+impl ToString for CustomerType {
+    fn to_string(&self) -> String {
+        match self {
+            CustomerType::PERSONAL => String::from("personal"),
+            CustomerType::MANAGER => String::from("manager"),
+            CustomerType::DEVELOPER => String::from("developer"),
+        }
+    }
 }
 
 impl FromStr for CustomerType {
@@ -39,16 +49,45 @@ impl FromStr for CustomerType {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AuthProviders {
+    GOOGLE,
+    LEGACY,
+}
+
+impl ToString for AuthProviders {
+    fn to_string(&self) -> String {
+        match self {
+            AuthProviders::GOOGLE => String::from("google"),
+            AuthProviders::LEGACY => String::from("legacy"),
+        }
+    }
+}
+
+
+impl FromStr for AuthProviders {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<AuthProviders, Self::Err> {
+        match s {
+            "google" => Ok(AuthProviders::GOOGLE),
+            "legacy" => Ok(AuthProviders::LEGACY),
+            _ => Ok(AuthProviders::LEGACY),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Customer {
     pub id: String,
     pub name: String,
     pub class: CustomerType,
     pub emails: Vec<Email>,
+    pub auth_provider: AuthProviders,
 
     // security
-    pub password: String, // store hash of password (NEVER PLAIN TEXT)
-    pub backup_security_codes: Vec<String>, // store hashes of backup securities
+    pub password: String, // store the hashed password
+    pub backup_security_codes: Vec<String>, // stire hashed backup security codes
 
     // miscelaneous
     pub preferences: Preferences,

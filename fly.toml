@@ -8,19 +8,21 @@ primary_region = "bog"
   dockerfile = "Dockerfile"
 
 [env]
+  HOST = "0.0.0.0"
+  PORT = "8080"
   API_URL="8i-test-machine.fly.dev"
   API_TOKENS_EXPIRATION_TIME = "86400"
-  HOST = "0.0.0.0"
   MONGO_DB_NAME = "test"
-  PORT = "8080"
   PRO_PRODUCT_ID="160756"
   PRO_MONTHLY_VARIANT_ID="202405"
   PRO_ANNUALLY_VARIANT_ID="202400"
   ENABLE_EMAIL_INTEGRATION="true"
-  BREVO_CUSTOMERS_LIST_ID="7"
   EMAIL_VERIFICATION_TEMPLATE_ID="1"
+  BREVO_CUSTOMERS_LIST_ID="7"
   BREVO_MASTER_EMAIL_ADDRESS="test@nazi.email"
   BREVO_MASTER_NAME="My Company"
+  GOOGLE_OAUTH_CLIENT_ID="36457200694-c4rudq1jf1ne13mhr99oidskaf3rcsli.apps.googleusercontent.com"
+  GOOGLE_OAUTH_CLIENT_REDIRECT_ENDPOINT="/api/identity/session/google"
 
 [http_service]
   internal_port = 8080

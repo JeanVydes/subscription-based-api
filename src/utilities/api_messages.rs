@@ -35,6 +35,13 @@ pub enum TokenMessages {
     ErrorValidating,
     Renewed,
     ErrorRenewing,
+
+
+    OnlyLegacyProvider,
+    OnlyGoogleProvider,
+
+    ErrorFetchingUserFromGoogle,
+    ErrorRequestingGoogleToken,
 }
 
 #[derive(Debug)]
@@ -131,6 +138,10 @@ impl ToString for TokenMessages {
             TokenMessages::ErrorValidating => "token.error_validating".to_string(),
             TokenMessages::Renewed => "token.renewed".to_string(),
             TokenMessages::ErrorRenewing => "token.error_renewing".to_string(),
+            TokenMessages::OnlyLegacyProvider => "token.only_legacy_provider".to_string(),
+            TokenMessages::OnlyGoogleProvider => "token.only_google_provider".to_string(),
+            TokenMessages::ErrorFetchingUserFromGoogle => "token.error_fetching_user_from_google".to_string(),
+            TokenMessages::ErrorRequestingGoogleToken => "token.error_requesting_google_token".to_string(),
         }
     }
 }

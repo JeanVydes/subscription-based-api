@@ -54,6 +54,10 @@ BREVO_EMAIL_VERIFY_TEMPLATE_ID=     # Not Sensitive Data (fly.toml)
 
 BREVO_MASTER_EMAIL_ADDRESS=         # Not Sensitive Data (fly.toml)
 BREVO_MASTER_NAME=                  # Not Sensitive Data (fly.toml)
+
+GOOGLE_OAUTH_CLIENT_ID=             # Not Sensitive Data (fly.toml)
+GOOGLE_OAUTH_CLIENT_SECRET=         # fly secrets set GOOGLE_OAUTH_CLIENT_SECRET= 
+GOOGLE_OAUTH_CLIENT_REDIRECT_ENDPOINT=   # Not Sensitive Data (fly.toml)
 ```
 
 # Future Ideas
