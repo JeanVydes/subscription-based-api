@@ -58,8 +58,8 @@ pub enum AuthProviders {
 impl ToString for AuthProviders {
     fn to_string(&self) -> String {
         match self {
-            AuthProviders::GOOGLE => String::from("google"),
-            AuthProviders::LEGACY => String::from("legacy"),
+            AuthProviders::GOOGLE => String::from("GOOGLE"),
+            AuthProviders::LEGACY => String::from("LEGACY"),
         }
     }
 }

@@ -239,7 +239,7 @@ pub async fn create_customer_record(
             };
 
             let greetings_title = format!("Welcome to Test App {}", customer.name);
-            let verification_link = format!("https://{}/api/me/verify/email?token={}", state.api_url, new_token);
+            let verification_link = format!("{}?token={}", state.google_auth.redirect_url, new_token);
             let send_email_data = SendEmailData {
                 api_key,
                 subject: "Verify Your Email Address To Start Using Test App".to_string(),

@@ -296,12 +296,27 @@ pub async fn legacy_authentication(
 #[derive(Debug, Deserialize)]
 pub struct GoogleOAuthQueryParams {
     pub code: Option<String>,
+    pub error: Option<String>,
 }
 
 pub async fn gooogle_authentication(
     Query(params): Query<GoogleOAuthQueryParams>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
+    match params.error {
+        Some(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(GenericResponse {
+                    message: APIMessages::Token(TokenMessages::ErrorRequestingGoogleToken).to_string(),
+                    data: json!({}),
+                    exited_code: 0,
+                }),
+            )
+        },
+        None => (),
+    };
+
     let authorization_code = match params.code {
         Some(token) => token,
         None => {
@@ -370,7 +385,18 @@ pub async fn gooogle_authentication(
             StatusCode::NOT_FOUND,
             Json(GenericResponse {
                 message: APIMessages::Customer(CustomerMessages::NotFound).to_string(),
-                data: json!({}),
+                data: json!({
+                    "action": "create_customer_record",
+                    "auth_provider": AuthProviders::GOOGLE,
+                    "openid": google_user.id,
+                    "email": google_user_email,
+                    "verified_email": google_user.verified_email,
+                    "name": google_user.name,
+                    "given_name": google_user.given_name,
+                    "family_name": google_user.family_name,
+                    "picture": google_user.picture,
+                    "locale": google_user.locale,
+                }),
                 exited_code: 0,
             }),
         );

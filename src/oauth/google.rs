@@ -65,7 +65,6 @@ pub async fn get_google_user(
 
 
     let response =client.get(url).bearer_auth(id_token).send().await?;
-
     if response.status().is_success() {
         let user_info = response.text().await?;
         let user_info: GoogleUserResult = serde_json::from_str(&user_info)?;
