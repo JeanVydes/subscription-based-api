@@ -88,12 +88,3 @@ pub struct Subscription {
 
     pub history_logs: Vec<SubscriptionHistoryLog>,
 }
-
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PublicSubscription {
-    pub id: String,
-    pub slug: String,
-    pub frequency: SubscriptionFrequencyClass,
-    pub status: String,
-}

@@ -26,7 +26,7 @@ pub async fn subscription_created(
             return Err(Json(GenericResponse {
                 message: String::from("error checking customer existence"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }));
         }
     };
@@ -35,7 +35,7 @@ pub async fn subscription_created(
         return Err(Json(GenericResponse {
             message: String::from("invalid customer_id: not records"),
             data: json!({}),
-            exited_code: 1,
+            exit_code: 1,
         }));
     }
 
@@ -48,7 +48,7 @@ pub async fn subscription_created(
         return Err(Json(GenericResponse {
             message: String::from("invalid variant_id"),
             data: json!({}),
-            exited_code: 1,
+            exit_code: 1,
         }));
     }
 
@@ -92,7 +92,7 @@ pub async fn subscription_created(
             return Err(Json(GenericResponse {
                 message: String::from("error converting subscription struct to bson"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }))
         }
     };
@@ -109,7 +109,7 @@ pub async fn subscription_created(
             return Err(Json(GenericResponse {
                 message: String::from("error updating customer subscription"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }))
         }
     }
@@ -128,7 +128,7 @@ pub async fn subscription_updated(
             return Err(Json(GenericResponse {
                 message: String::from("error checking customer existence"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }));
         }
     };
@@ -137,7 +137,7 @@ pub async fn subscription_updated(
         return Err(Json(GenericResponse {
             message: String::from("invalid customer_id: not records"),
             data: json!({}),
-            exited_code: 1,
+            exit_code: 1,
         }));
     }
 
@@ -162,7 +162,7 @@ pub async fn subscription_updated(
             return Err(Json(GenericResponse {
                 message: String::from("error updating customer subscription"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }))
         }
     }
@@ -182,7 +182,7 @@ pub async fn subscription_update_status(
             return Err(Json(GenericResponse {
                 message: String::from("error checking customer existence"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }));
         }
     };
@@ -191,7 +191,7 @@ pub async fn subscription_update_status(
         return Err(Json(GenericResponse {
             message: String::from("invalid customer_id: not records"),
             data: json!({}),
-            exited_code: 1,
+            exit_code: 1,
         }));
     }
 
@@ -215,7 +215,7 @@ pub async fn subscription_update_status(
             return Err(Json(GenericResponse {
                 message: String::from("error updating customer subscription"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }))
         }
     }
@@ -233,7 +233,7 @@ pub async fn subscription_update_history_logs(
             return Err(Json(GenericResponse {
                 message: String::from("error checking customer existence"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }));
         }
     };
@@ -242,7 +242,7 @@ pub async fn subscription_update_history_logs(
         return Err(Json(GenericResponse {
             message: String::from("invalid customer_id: not records"),
             data: json!({}),
-            exited_code: 1,
+            exit_code: 1,
         }));
     }
 
@@ -265,7 +265,7 @@ pub async fn subscription_update_history_logs(
             return Err(Json(GenericResponse {
                 message: String::from("error updating customer subscription"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }))
         }
     }

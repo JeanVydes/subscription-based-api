@@ -19,8 +19,9 @@ use super::api_messages::{APIMessages, RedisMessages, TokenMessages};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub aud: String,
+    pub iss: String,
     pub sub: String,
+    pub aud: String,
     pub exp: usize,
 }
 
@@ -43,14 +44,16 @@ pub fn string_to_scopes(scopes: String) -> Vec<SessionScopes> {
 }
 
 pub fn create_token(id: &String, scopes: Vec<SessionScopes>) -> Result<std::string::String, String> {
+    let api_url = env::var("API_URL").unwrap_or(String::from("http://localhost:3000"));
     let expiration_time = env::var("API_TOKENS_EXPIRATION_TIME").unwrap_or(String::from("86400"));
     let header = Header::new(Algorithm::HS512);
 
     let sanitized_scopes = scopes_to_string(scopes);
 
     let claims = Claims {
-        aud: sanitized_scopes,
+        iss: api_url,
         sub: id.to_string(),
+        aud: sanitized_scopes,
         exp: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -118,7 +121,7 @@ pub async fn get_session_from_redis(
             Json(GenericResponse {
                 message: APIMessages::Redis(RedisMessages::ErrorFetching).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         )),
     }
@@ -133,7 +136,7 @@ pub async fn extract_token_from_headers(headers: &HeaderMap) -> Result<&str, (St
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::ErrorParsingToken).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )),
         },
@@ -142,7 +145,7 @@ pub async fn extract_token_from_headers(headers: &HeaderMap) -> Result<&str, (St
             Json(GenericResponse {
                 message: APIMessages::Token(TokenMessages::NotAuthorizationHeader).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         )),
     }

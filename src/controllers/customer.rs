@@ -3,9 +3,9 @@ use crate::types::email::SendEmailData;
 use crate::utilities::api_messages::{APIMessages, CustomerMessages, EmailMessages, InputMessages, MongoMessages, RedisMessages, TokenMessages};
 use crate::utilities::helpers::{payload_analyzer, random_string, valid_password, valid_email, parse_class};
 use crate::storage::mongo::{build_customer_filter, find_customer, update_customer};
-use crate::types::customer::{AuthProviders, Customer, Email, Preferences, PublicCustomer};
+use crate::types::customer::{AuthProviders, Customer, Email, Preferences, PrivateSensitiveCustomer};
 use crate::types::incoming_requests::{CreateCustomerRecord, CustomerUpdateName, CustomerUpdatePassword, CustomerAddEmail};
-use crate::types::subscription::{PublicSubscription, Slug, Subscription, SubscriptionFrequencyClass};
+use crate::types::subscription::{Slug, Subscription, SubscriptionFrequencyClass};
 use crate::{server::AppState, types::customer::GenericResponse};
 
 use axum::extract::Query;
@@ -38,7 +38,7 @@ pub async fn create_customer_record(
             Json(GenericResponse {
                 message: APIMessages::Customer(CustomerMessages::NotAcceptedTerms).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -56,7 +56,7 @@ pub async fn create_customer_record(
             Json(GenericResponse {
                 message: APIMessages::Input(InputMessages::InvalidNameLength).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -79,7 +79,7 @@ pub async fn create_customer_record(
                 Json(GenericResponse {
                     message: APIMessages::Customer(CustomerMessages::PasswordConfirmationDoesNotMatch).to_string(),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             );
         }
@@ -91,7 +91,7 @@ pub async fn create_customer_record(
                 Json(GenericResponse {
                     message: APIMessages::Email(EmailMessages::EmailAndPasswordMustBeDifferent).to_string(),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             );
         }
@@ -104,7 +104,7 @@ pub async fn create_customer_record(
                     Json(GenericResponse {
                         message: APIMessages::Customer(CustomerMessages::ErrorHashingPassword).to_string(),
                         data: json!({}),
-                        exited_code: 1,
+                        exit_code: 1,
                     }),
                 )
             }
@@ -123,7 +123,7 @@ pub async fn create_customer_record(
             Json(GenericResponse {
                 message: APIMessages::Email(EmailMessages::Taken).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -198,7 +198,7 @@ pub async fn create_customer_record(
                     Json(GenericResponse {
                         message: APIMessages::Customer(CustomerMessages::ErrorRegisteringCustomerInMarketingPlatform).to_string(),
                         data: json!({}),
-                        exited_code: 1,
+                        exit_code: 1,
                     }),
                 )
             }
@@ -214,7 +214,7 @@ pub async fn create_customer_record(
                         Json(GenericResponse {
                             message: APIMessages::Redis(RedisMessages::FailedToConnect).to_string(),
                             data: json!({}),
-                            exited_code: 0,
+                            exit_code: 1,
                         }),
                     )
                 }
@@ -232,7 +232,7 @@ pub async fn create_customer_record(
                         Json(GenericResponse {
                             message: APIMessages::Redis(RedisMessages::ErrorSettingKey).to_string(),
                             data: json!({}),
-                            exited_code: 0,
+                            exit_code: 1,
                         }),
                     )
                 }
@@ -260,7 +260,7 @@ pub async fn create_customer_record(
                         Json(GenericResponse {
                             message: APIMessages::Email(EmailMessages::ErrorSendingVerificationEmail).to_string(),
                             data: json!({}),
-                            exited_code: 1,
+                            exit_code: 1,
                         }),
                     )
                 }
@@ -277,7 +277,7 @@ pub async fn create_customer_record(
                 Json(GenericResponse {
                     message: APIMessages::Mongo(MongoMessages::ErrorInserting).to_string(),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             )
         }
@@ -288,7 +288,7 @@ pub async fn create_customer_record(
         Json(GenericResponse {
             message: APIMessages::Customer(CustomerMessages::Created).to_string(),
             data: json!(customer),
-            exited_code: 0,
+            exit_code: 0,
         }),
     )
 }
@@ -298,10 +298,16 @@ pub struct FetchCustomerByID {
     pub id: Option<String>,
 }
 
-pub async fn fetch_public_customer_record_by_id(
+pub async fn fetch_customer_record_by_id(
+    headers: HeaderMap,
     Query(params): Query<FetchCustomerByID>,
     state: Arc<AppState>,
 ) -> (StatusCode, Json<GenericResponse>) {
+    let session_data = match get_user_session_from_req(headers, &state.redis_connection).await {
+        Ok(customer_id) => customer_id,
+        Err((status_code, json)) => return (status_code, json),
+    };
+
     let customer_id = match params.id {
         Some(id) => id,
         None => {
@@ -310,7 +316,7 @@ pub async fn fetch_public_customer_record_by_id(
                 Json(GenericResponse {
                     message: APIMessages::Customer(CustomerMessages::NotFoundByID).to_string(),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             )
         }
@@ -328,36 +334,64 @@ pub async fn fetch_public_customer_record_by_id(
             Json(GenericResponse {
                 message: APIMessages::Customer(CustomerMessages::NotFound).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
 
     let customer = customer.unwrap();
-    let public_subscription = PublicSubscription {
-        id: customer.subscription.id,
-        slug: customer.subscription.slug,
-        frequency: customer.subscription.frequency,
-        status: customer.subscription.status,
+
+    let mut shared_customer_data = PrivateSensitiveCustomer {
+        id: Some(customer_id),
+        name: Some(customer.name),
+        class: Some(customer.class),
+        emails: Some(customer.emails),
+        auth_provider: Some(customer.auth_provider),
+        preferences: Some(customer.preferences),
+        subscription: Some(customer.subscription),
+        created_at: Some(customer.created_at),
+        updated_at: Some(customer.updated_at),
+        deleted: Some(customer.deleted),
     };
 
-    let public_customer = PublicCustomer {
-        id: customer.id,
-        name: customer.name,
-        class: customer.class,
-        preferences: customer.preferences,
-        subscription: public_subscription,
-        created_at: customer.created_at,
-        updated_at: customer.updated_at,
-        deleted: customer.deleted,
-    };
+    if session_data.scopes.contains(&SessionScopes::TotalAccess) {
+        return (
+            StatusCode::OK,
+            Json(GenericResponse {
+                message: APIMessages::Customer(CustomerMessages::Found).to_string(),
+                data: json!(shared_customer_data),
+                exit_code: 1,
+            }),
+        );
+    }
+
+    if !session_data.scopes.contains(&SessionScopes::ViewPublicID) {
+        shared_customer_data.id = None;
+    }
+
+    if !session_data.scopes.contains(&SessionScopes::ViewEmailAddresses) {
+        shared_customer_data.emails = None;
+    }
+
+    if !session_data.scopes.contains(&SessionScopes::ViewSubscription) {
+        shared_customer_data.subscription = None;
+    }
+
+    if !session_data.scopes.contains(&SessionScopes::ViewPublicProfile) {
+        shared_customer_data.name = None;
+        shared_customer_data.class = None;
+        shared_customer_data.preferences = None;
+        shared_customer_data.created_at = None;
+        shared_customer_data.updated_at = None;
+        shared_customer_data.deleted = None;
+    }
 
     (
         StatusCode::OK,
         Json(GenericResponse {
             message: APIMessages::Customer(CustomerMessages::Found).to_string(),
-            data: json!(public_customer),
-            exited_code: 0,
+            data: json!(shared_customer_data),
+            exit_code: 0,
         }),
     )
 }
@@ -372,13 +406,13 @@ pub async fn update_name(
         Err((status_code, json)) => return (status_code, json),
     };
 
-    if !session_data.scopes.contains(&SessionScopes::ReadWrite) {
+    if !(session_data.scopes.contains(&SessionScopes::TotalAccess) && session_data.scopes.contains(&SessionScopes::UpdateName)) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(GenericResponse {
                 message: APIMessages::Token(TokenMessages::NotAllowedScopesToPerformAction).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
@@ -394,7 +428,7 @@ pub async fn update_name(
             Json(GenericResponse {
                 message: APIMessages::Input(InputMessages::InvalidNameLength).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -415,7 +449,7 @@ pub async fn update_name(
             Json(GenericResponse {
                 message: APIMessages::Customer(CustomerMessages::NameUpdated).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 0,
             }),
         ),
         Err((status, json)) => return (status, json)
@@ -432,13 +466,13 @@ pub async fn update_password(
         Err((status_code, json)) => return (status_code, json),
     };
 
-    if !session_data.scopes.contains(&SessionScopes::ReadWrite) {
+    if !session_data.scopes.contains(&SessionScopes::TotalAccess) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(GenericResponse {
                 message: APIMessages::Token(TokenMessages::NotAllowedScopesToPerformAction).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
@@ -455,7 +489,7 @@ pub async fn update_password(
             Json(GenericResponse {
                 message: APIMessages::Customer(CustomerMessages::NotFound).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -471,7 +505,7 @@ pub async fn update_password(
             Json(GenericResponse {
                 message: APIMessages::Input(InputMessages::InvalidOldPasswordLength).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -482,7 +516,7 @@ pub async fn update_password(
             Json(GenericResponse {
                 message: APIMessages::Input(InputMessages::InvalidNewPasswordLength).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -498,7 +532,7 @@ pub async fn update_password(
             Json(GenericResponse {
                 message: APIMessages::Input(InputMessages::NewPasswordAndOldPasswordMustBeDifferent).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -509,7 +543,7 @@ pub async fn update_password(
             Json(GenericResponse {
                 message: APIMessages::Input(InputMessages::NewPasswordConfirmationMustMatch).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -522,13 +556,14 @@ pub async fn update_password(
                 Json(GenericResponse {
                     message: APIMessages::Customer(CustomerMessages::ErrorHashingPassword).to_string(),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             )
         }
     };
 
     let customer = customer.unwrap();
+
     match verify(&payload.old_password, &customer.password) {
         Ok(is_valid) => {
             if !is_valid {
@@ -537,7 +572,7 @@ pub async fn update_password(
                     Json(GenericResponse {
                         message: APIMessages::Customer(CustomerMessages::IncorrectPassword).to_string(),
                         data: json!({}),
-                        exited_code: 0,
+                        exit_code: 1,
                     }),
                 );
             }
@@ -548,7 +583,7 @@ pub async fn update_password(
                 Json(GenericResponse {
                     message: APIMessages::Customer(CustomerMessages::ErrorVerifyingPassword).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -570,7 +605,7 @@ pub async fn update_password(
             Json(GenericResponse {
                 message: APIMessages::Customer(CustomerMessages::PasswordUpdated).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 0,
             }),
         ),
         Err((status, json)) => return (status, json)
@@ -587,13 +622,13 @@ pub async fn add_email(
         Err((status_code, json)) => return (status_code, json),
     };
 
-    if !session_data.scopes.contains(&SessionScopes::ReadWrite) {
+    if !(session_data.scopes.contains(&SessionScopes::TotalAccess) && session_data.scopes.contains(&SessionScopes::UpdateEmailAddresses)) {
         return (
             StatusCode::UNAUTHORIZED,
             Json(GenericResponse {
                 message: APIMessages::Token(TokenMessages::NotAllowedScopesToPerformAction).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
@@ -615,12 +650,15 @@ pub async fn add_email(
             Json(GenericResponse {
                 message: APIMessages::Customer(CustomerMessages::NotFound).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1
+                ,
             }),
         );
     };
 
+    
     let customer = customer.unwrap();
+
     let mut emails = customer.emails;
     if emails.len() >= 5 {
         return (
@@ -628,7 +666,7 @@ pub async fn add_email(
             Json(GenericResponse {
                 message: APIMessages::Email(EmailMessages::MaxEmailsReached).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -646,7 +684,7 @@ pub async fn add_email(
                 Json(GenericResponse {
                     message: APIMessages::Email(EmailMessages::Taken).to_string(),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             );
         }
@@ -665,7 +703,7 @@ pub async fn add_email(
                 Json(GenericResponse {
                     message: APIMessages::Email(EmailMessages::TakenByOtherCustomer).to_string(),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             );
         }
@@ -675,7 +713,7 @@ pub async fn add_email(
             Json(GenericResponse {
                 message: APIMessages::Email(EmailMessages::TakenByYou).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -713,7 +751,7 @@ pub async fn add_email(
             Json(GenericResponse {
                 message: APIMessages::Customer(CustomerMessages::EmailAdded).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 0,
             }),
         ),
         Err((status, json)) => return (status, json)
@@ -737,7 +775,7 @@ pub async fn verify_email(
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::Missing).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -751,7 +789,7 @@ pub async fn verify_email(
                 Json(GenericResponse {
                     message: APIMessages::Redis(RedisMessages::FailedToConnect).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -765,7 +803,7 @@ pub async fn verify_email(
                 Json(GenericResponse {
                     message: APIMessages::Redis(RedisMessages::ErrorFetching).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -777,7 +815,7 @@ pub async fn verify_email(
             Json(GenericResponse {
                 message: APIMessages::Unauthorized.to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
@@ -806,7 +844,7 @@ pub async fn verify_email(
                 Json(GenericResponse {
                     message: APIMessages::Redis(RedisMessages::ErrorDeleting).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -817,7 +855,7 @@ pub async fn verify_email(
         Json(GenericResponse {
             message: APIMessages::Email(EmailMessages::Verified).to_string(),
             data: json!({}),
-            exited_code: 0,
+            exit_code: 0,
         }),
     )
 }

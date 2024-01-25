@@ -1,8 +1,9 @@
+use axum::extract::Query;
 use axum::BoxError;
 use axum::error_handling::HandleErrorLayer;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::{Router, routing::get};
-use crate::controllers::customer::fetch_public_customer_record_by_id;
+use crate::controllers::customer::{fetch_customer_record_by_id, FetchCustomerByID};
 
 use crate::server::AppState;
 use std::{sync::Arc, time::Duration};
@@ -16,7 +17,7 @@ pub async fn get_public_router(app_state: Arc<AppState>) -> Router<Arc<AppState>
             "/fetch/customer/by/id",
             get({
                 let app_state = Arc::clone(&app_state);
-                move |payload| fetch_public_customer_record_by_id(payload, app_state)
+                move |(headers, query): (HeaderMap, Query<FetchCustomerByID>)| fetch_customer_record_by_id(headers, query, app_state)
             }),
         )
         .layer(

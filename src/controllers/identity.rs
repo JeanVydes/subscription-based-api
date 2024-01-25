@@ -16,7 +16,6 @@ use axum::{
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use std::string;
 use std::sync::Arc;
 
 use bcrypt::verify;
@@ -25,19 +24,33 @@ use serde_json::json;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum SessionScopes {
-    PublicRead,
-    SensitiveRead,
-    Write,
-    ReadWrite,
+    ViewPublicID,
+    ViewEmailAddresses,
+    ViewPublicProfile,
+    ViewPrivateSensitiveProfile,
+    ViewSubscription,
+    
+    UpdateName,
+    UpdateEmailAddresses,
+    UpdatePreferences,
+
+    TotalAccess, // never use this for 3rd party apps
 }
 
 impl ToString for SessionScopes {
     fn to_string(&self) -> String {
         match self {
-            SessionScopes::PublicRead => "public_read".to_string(),
-            SessionScopes::SensitiveRead => "sensitive_read".to_string(),
-            SessionScopes::Write => "write".to_string(),
-            SessionScopes::ReadWrite => "read_write".to_string(),
+            SessionScopes::ViewPublicID => String::from("view_public_id"),
+            SessionScopes::ViewEmailAddresses => String::from("view_email_addresses"),
+            SessionScopes::ViewPublicProfile => String::from("view_public_profile"),
+            SessionScopes::ViewPrivateSensitiveProfile => String::from("view_private_sensitive_profile"),
+            SessionScopes::ViewSubscription => String::from("view_subscription"),
+            
+            SessionScopes::UpdateName => String::from("update_name"),
+            SessionScopes::UpdateEmailAddresses => String::from("update_email_addresses"),
+            SessionScopes::UpdatePreferences => String::from("update_preferences"),
+
+            SessionScopes::TotalAccess => String::from("total_access"),
         }
     }
 }
@@ -47,10 +60,17 @@ impl FromStr for SessionScopes {
 
     fn from_str(input: &str) -> Result<SessionScopes, Self::Err> {
         match input {
-            "public_read" => Ok(SessionScopes::PublicRead),
-            "sensitive_read" => Ok(SessionScopes::SensitiveRead),
-            "write" => Ok(SessionScopes::Write),
-            "read_write" => Ok(SessionScopes::ReadWrite),
+            "view_public_id" => Ok(SessionScopes::ViewPublicID),
+            "view_email_addresses" => Ok(SessionScopes::ViewEmailAddresses),
+            "view_public_profile" => Ok(SessionScopes::ViewPublicProfile),
+            "view_private_sensitive_profile" => Ok(SessionScopes::ViewPrivateSensitiveProfile),
+            "view_subscription" => Ok(SessionScopes::ViewSubscription),
+            
+            "update_name" => Ok(SessionScopes::UpdateName),
+            "update_email_addresses" => Ok(SessionScopes::UpdateEmailAddresses),
+            "update_preferences" => Ok(SessionScopes::UpdatePreferences),
+
+            "total_access" => Ok(SessionScopes::TotalAccess),
             _ => Err(()),
         }
     }
@@ -74,10 +94,11 @@ pub async fn get_user_session_from_req(
             Json(GenericResponse {
                 message: String::from(format!("unauthorized: {}", msg)),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         )),
     };
+
     let customer_id = match get_session_from_redis(redis_connection, &token_string).await {
         Ok(token) => token,
         Err((status_code, json)) => return Err((status_code, json)),
@@ -91,11 +112,22 @@ pub async fn get_user_session_from_req(
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::ErrorParsingToken).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             ))
         }
     };
+
+    if customer_id != token_data.claims.sub {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(GenericResponse {
+                message: String::from("unauthorized"),
+                data: json!({}),
+                exit_code: 1,
+            }),
+        ));
+    }
 
     let raw_scopes = token_data.claims.aud;
     let scopes: Vec<SessionScopes> = string_to_scopes(raw_scopes);
@@ -123,7 +155,7 @@ pub async fn get_session(
             Json(GenericResponse {
                 message: String::from("unauthorized"),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
@@ -135,7 +167,7 @@ pub async fn get_session(
             data: json!({
                 "customer_id": session_data.customer_id,
             }),
-            exited_code: 0,
+            exit_code: 0,
         }),
     )
 }
@@ -157,7 +189,7 @@ pub async fn renew_session(
                 Json(GenericResponse {
                     message: APIMessages::Redis(RedisMessages::FailedToConnect).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -171,7 +203,7 @@ pub async fn renew_session(
                 Json(GenericResponse {
                     message: APIMessages::Redis(RedisMessages::ErrorFetching).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -183,7 +215,7 @@ pub async fn renew_session(
             Json(GenericResponse {
                 message: APIMessages::Token(TokenMessages::Expired).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
@@ -200,7 +232,7 @@ pub async fn renew_session(
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::ErrorRenewing).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -211,7 +243,7 @@ pub async fn renew_session(
         Json(GenericResponse {
             message: APIMessages::Token(TokenMessages::Renewed).to_string(),
             data: json!({}),
-            exited_code: 0,
+            exit_code: 0,
         }),
     );
 }
@@ -233,7 +265,7 @@ pub async fn legacy_authentication(
             Json(GenericResponse {
                 message: APIMessages::Email(EmailMessages::Invalid).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -250,7 +282,7 @@ pub async fn legacy_authentication(
             Json(GenericResponse {
                 message: APIMessages::Customer(CustomerMessages::NotFound).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
@@ -262,7 +294,7 @@ pub async fn legacy_authentication(
             Json(GenericResponse {
                 message: APIMessages::Token(TokenMessages::OnlyLegacyProvider).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
@@ -275,7 +307,7 @@ pub async fn legacy_authentication(
                     Json(GenericResponse {
                         message: APIMessages::Unauthorized.to_string(),
                         data: json!({}),
-                        exited_code: 0,
+                        exit_code: 1,
                     }),
                 );
             }
@@ -286,7 +318,7 @@ pub async fn legacy_authentication(
                 Json(GenericResponse {
                     message: APIMessages::InternalServerError.to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -298,12 +330,12 @@ pub async fn legacy_authentication(
             Json(GenericResponse {
                 message: APIMessages::Token(TokenMessages::OnlyLegacyProvider).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
 
-    let token = match create_token(&customer.id, vec![SessionScopes::ReadWrite]) {
+    let token = match create_token(&customer.id, vec![SessionScopes::TotalAccess]) {
         Ok(token) => token,
         Err(_) => {
             return (
@@ -311,7 +343,7 @@ pub async fn legacy_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::ErrorCreating).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -325,7 +357,7 @@ pub async fn legacy_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Redis(RedisMessages::FailedToConnect).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -343,7 +375,7 @@ pub async fn legacy_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Redis(RedisMessages::ErrorSettingKey).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -356,7 +388,7 @@ pub async fn legacy_authentication(
             data: json!({
                 "token": token,
             }),
-            exited_code: 0,
+            exit_code: 0,
         }),
     );
 }
@@ -378,7 +410,7 @@ pub async fn gooogle_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::ErrorRequestingGoogleToken).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         },
@@ -393,7 +425,7 @@ pub async fn gooogle_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::Missing).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -407,7 +439,7 @@ pub async fn gooogle_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::ErrorRequestingGoogleToken).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -421,7 +453,7 @@ pub async fn gooogle_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::ErrorFetchingUserFromGoogle).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -436,7 +468,7 @@ pub async fn gooogle_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::ErrorFetchingUserFromGoogle).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -465,7 +497,7 @@ pub async fn gooogle_authentication(
                     "picture": google_user.picture,
                     "locale": google_user.locale,
                 }),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
@@ -477,12 +509,12 @@ pub async fn gooogle_authentication(
             Json(GenericResponse {
                 message: APIMessages::Token(TokenMessages::OnlyGoogleProvider).to_string(),
                 data: json!({}),
-                exited_code: 0,
+                exit_code: 1,
             }),
         );
     }
 
-    let token = match create_token(&customer.id, vec![SessionScopes::ReadWrite]) {
+    let token = match create_token(&customer.id, vec![SessionScopes::TotalAccess]) {
         Ok(token) => token,
         Err(_) => {
             return (
@@ -490,7 +522,7 @@ pub async fn gooogle_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Token(TokenMessages::ErrorCreating).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -504,7 +536,7 @@ pub async fn gooogle_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Redis(RedisMessages::FailedToConnect).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -522,7 +554,7 @@ pub async fn gooogle_authentication(
                 Json(GenericResponse {
                     message: APIMessages::Redis(RedisMessages::ErrorSettingKey).to_string(),
                     data: json!({}),
-                    exited_code: 0,
+                    exit_code: 1,
                 }),
             )
         }
@@ -535,7 +567,7 @@ pub async fn gooogle_authentication(
             data: json!({
                 "token": token,
             }),
-            exited_code: 0,
+            exit_code: 0,
         }),
     );
 }

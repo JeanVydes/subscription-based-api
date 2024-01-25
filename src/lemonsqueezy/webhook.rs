@@ -38,7 +38,7 @@ where
                 Json(GenericResponse {
                     message: String::from("missing signature"),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             )
         }
@@ -52,7 +52,7 @@ where
                 Json(GenericResponse {
                     message: String::from("invalid signature"),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             )
         }
@@ -64,7 +64,7 @@ where
             Json(GenericResponse {
                 message: String::from("invalid signature length"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -77,7 +77,7 @@ where
                 Json(GenericResponse {
                     message: String::from("invalid signature"),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             )
         }
@@ -91,7 +91,7 @@ where
                 Json(GenericResponse {
                     message: String::from("error verifying signature payload"),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             )
         }
@@ -107,7 +107,7 @@ where
             Json(GenericResponse {
                 message: String::from("invalid signature"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -117,7 +117,7 @@ where
         Json(GenericResponse {
             message: String::from(""),
             data: json!({}),
-            exited_code: 0,
+            exit_code: 0,
         }),
     );
 }
@@ -145,7 +145,7 @@ pub async fn orders_webhook_events_listener(
         Json(GenericResponse {
             message: String::from("captured"),
             data: json!({}),
-            exited_code: 0,
+            exit_code: 0,
         }),
     );
 }
@@ -175,7 +175,7 @@ pub async fn subscription_webhook_events_listener(
                 Json(GenericResponse {
                     message: String::from("not custom_data"),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             );
         }
@@ -190,7 +190,7 @@ pub async fn subscription_webhook_events_listener(
             Json(GenericResponse {
                 message: String::from("missing customer_id"),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         );
     }
@@ -289,7 +289,7 @@ pub async fn subscription_webhook_events_listener(
         Json(GenericResponse {
             message: String::from("captured"),
             data: json!({}),
-            exited_code: 0,
+            exit_code: 0,
         }),
     );
 }

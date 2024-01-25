@@ -22,7 +22,7 @@ pub fn payload_analyzer<T>(
             let json = Json(GenericResponse {
                 message,
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             });
 
             return Err((StatusCode::INTERNAL_SERVER_ERROR, json));
@@ -39,7 +39,7 @@ pub async fn fallback(uri: Uri) -> (StatusCode, Json<GenericResponse>) {
         Json(GenericResponse {
             message,
             data: json!({}),
-            exited_code: 1,
+            exit_code: 1,
         }),
     )
 }
@@ -59,7 +59,7 @@ pub async fn valid_email(email: &String) -> Result<bool, (StatusCode, Json<Gener
             Json(GenericResponse {
                 message: APIMessages::Email(EmailMessages::Invalid).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         ));
     }
@@ -71,7 +71,7 @@ pub async fn valid_email(email: &String) -> Result<bool, (StatusCode, Json<Gener
             Json(GenericResponse {
                 message: APIMessages::Email(EmailMessages::Invalid).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         ));
     };
@@ -86,7 +86,7 @@ pub async fn valid_password(password: &String) -> Result<bool, (StatusCode, Json
             Json(GenericResponse {
                 message: APIMessages::Input(InputMessages::InvalidNewPasswordLength).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         ));
     }
@@ -98,7 +98,7 @@ pub async fn valid_password(password: &String) -> Result<bool, (StatusCode, Json
             Json(GenericResponse {
                 message: APIMessages::Input(InputMessages::PasswordMustHaveAtLeastOneLetterAndOneNumber).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         ));
     };
@@ -118,7 +118,7 @@ pub async fn parse_class(raw_class: &String) -> Result<CustomerType, (StatusCode
             Json(GenericResponse {
                 message: APIMessages::Customer(CustomerMessages::InvalidType).to_string(),
                 data: json!({}),
-                exited_code: 1,
+                exit_code: 1,
             }),
         ));
     }

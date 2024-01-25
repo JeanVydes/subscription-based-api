@@ -61,7 +61,7 @@ pub async fn find_customer(db: &Database, filter: Document) -> Result<(bool, Opt
                 Json(GenericResponse {
                     message: String::from("error fetching customer"),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             ));
         },
@@ -79,7 +79,7 @@ pub async fn update_customer(db: &Database, filter: Document, update: Document) 
                 Json(GenericResponse {
                     message: String::from("error updating record in database"),
                     data: json!({}),
-                    exited_code: 1,
+                    exit_code: 1,
                 }),
             ));
         }

@@ -31,15 +31,7 @@ primary_region = "bog"
   auto_start_machines = true
   min_machines_running = 0
   processes = ["app"]
-
-[[services]]
-  protocol = ""
-  internal_port = 0
-
-  [[services.ports]]
-    port = 8080
-    handlers = ["http"]
-
+  
 [[vm]]
   cpu_kind = "shared"
   cpus = 1

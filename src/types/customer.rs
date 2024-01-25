@@ -3,13 +3,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str::FromStr;
 
-use super::subscription::PublicSubscription;
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GenericResponse {
     pub message: String,
     pub data: Value,
-    pub exited_code: u64,
+    pub exit_code: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,12 +103,30 @@ pub struct PublicCustomer {
     pub class: CustomerType,
     
     pub preferences: Preferences,
-    pub subscription: PublicSubscription,
+    pub subscription: Subscription,
 
     pub created_at: String,
     pub updated_at: String,
     pub deleted: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrivateSensitiveCustomer {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub class: Option<CustomerType>,
+    pub emails: Option<Vec<Email>>,
+    pub auth_provider: Option<AuthProviders>,
+
+    // miscelaneous
+    pub preferences: Option<Preferences>,
+    pub subscription: Option<Subscription>,
+
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+    pub deleted: Option<bool>,
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Preferences {
