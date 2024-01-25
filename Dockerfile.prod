@@ -5,7 +5,6 @@ FROM rust:slim-buster AS builder
 WORKDIR /prod
 COPY Cargo.lock .
 COPY Cargo.toml .
-COPY config.toml .
 RUN mkdir .cargo
 RUN cargo vendor > .cargo/config
 
@@ -20,5 +19,4 @@ RUN dnf install -y libpq
 
 EXPOSE 8080
 COPY --from=builder /prod/target/release/app /bin/app
-COPY --from=builder /usr/src/app/config.toml /etc/app/config.toml
 ENTRYPOINT ["/bin/app"]

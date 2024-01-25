@@ -9,7 +9,6 @@ ENV CARGO_TARGET_DIR=/usr/src/app/target
 
 COPY Cargo.lock .
 COPY Cargo.toml .
-COPY config.toml .
 COPY . .
 
 RUN apt-get update && apt-get install -y pkg-config libssl-dev libpq-dev
@@ -22,5 +21,4 @@ RUN dnf install -y libpq
 
 EXPOSE 8080
 COPY --from=builder /usr/src/app/target/debug/app /bin/app
-COPY --from=builder /usr/src/app/config.toml /etc/app/config.toml
 ENTRYPOINT ["/bin/app"]
