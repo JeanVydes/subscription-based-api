@@ -3,9 +3,10 @@ use axum::BoxError;
 use axum::error_handling::HandleErrorLayer;
 use axum::http::{HeaderMap, StatusCode};
 use axum::{Router, routing::get};
-use crate::controllers::customer::{fetch_customer_record_by_id, FetchCustomerByID};
+use crate::controllers::customer::fetch_customer_record_by_id;
 
 use crate::server::AppState;
+use crate::types::incoming_requests::FetchCustomerByID;
 use std::{sync::Arc, time::Duration};
 
 use tower::{buffer::BufferLayer, limit::RateLimitLayer, ServiceBuilder};

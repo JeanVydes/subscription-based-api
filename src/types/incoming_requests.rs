@@ -33,3 +33,13 @@ pub struct CustomerUpdatePassword {
 pub struct CustomerAddEmail {
     pub email: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct FetchCustomerByID {
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VerifyEmailQueryParams {
+    pub token: Option<String>,
+}
